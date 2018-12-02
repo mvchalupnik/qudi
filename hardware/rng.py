@@ -1,5 +1,7 @@
 from core.module import Base, ConfigOption
 from interface.rng_interface import RNGInterface
+import numpy as np
+import matplotlib.pyplot as plt
 
 import random
 
@@ -68,3 +70,29 @@ class RNG(Base, RNGInterface):
             output.append(random_value)
 
         return output
+
+    # Methods to test data transfer over the network
+    def return_float(self):
+        return 1.23456789e-3
+
+    def return_string(self):
+        return 'abcdefghABCDEFGH12345&()@$$@)$_@buidw*'
+
+    def return_boolean(self):
+        return True
+
+    def return_1d_array(self, length=10):
+        float_list = [1e-3 * i for i in range(length)]
+        return float_list
+
+    def return_2d_array(self, length=10):
+        array = np.zeros((length, length))
+        for i in range(length):
+            for j in range(length):
+                array[i][j] = (i-j)*1e-3
+        return array
+
+    # def return_picture(self):
+    #     fig, ax = plt.subplots()
+    #     ax.plot([1, 2, 3, 4, 5], [1, 4, 9, 14, 25])
+    #     return fig
