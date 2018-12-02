@@ -137,8 +137,8 @@ class QZMQKernel(QtCore.QObject):
 
         self.hb_thread = QtCore.QThread()
         self.hb_thread.setObjectName(self.engine_id)
-        self.connection = config["transport"] + "://" + config["ip"]
-        self.secure_key = config["key"].encode('ascii')
+        self.connection = self.config["transport"] + "://" + self.config["ip"]
+        self.secure_key = self.config["key"].encode('ascii')
         self.signature_schemes = {"hmac-sha256": hashlib.sha256}
         self.auth = hmac.HMAC(
             self.secure_key,
