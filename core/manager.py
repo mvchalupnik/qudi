@@ -943,17 +943,24 @@ class Manager(QtCore.QObject):
 
           @param string base: module base package (hardware, logic or gui)
           @param string name: module which is going to be activated.
-
         """
         if not self.isModuleLoaded(base, name):
             logger.error('{0} module {1} not loaded.'.format(base, name))
             return
         module = self.tree['loaded'][base][name]
-        if module.module_state() != 'deactivated' and (
-                self.isModuleDefined(base, name)
-                and 'remote' in self.tree['defined'][base][name]):
-            logger.debug('No need to activate remote module {0}.{1}.'.format(base, name))
+
+        # Handling of remote modules: don't do anything
+        if 'remote' in self.tree['defined'][base][name]:
+            logger.debug('Ignore attempt to activate remote module {0}.{1}'.format(base, name))
             return
+
+        # Original version of remote module handling
+        # if module.module_state() != 'deactivated' and (
+        #         self.isModuleDefined(base, name)
+        #         and 'remote' in self.tree['defined'][base][name]):
+        #     logger.debug('No need to activate remote module {0}.{1}.'.format(base, name))
+        #     return
+
         if module.module_state() != 'deactivated':
             logger.error('{0} module {1} not deactivated'.format(base, name))
             return
@@ -991,6 +998,12 @@ class Manager(QtCore.QObject):
             logger.error('{0} module {1} not loaded.'.format(base, name))
             return
         module = self.tree['loaded'][base][name]
+
+        # Handling of remote modules: don't do anything
+        if 'remote' in self.tree['defined'][base][name]:
+            logger.debug('Ignore attempt to deactivate remote module {0}.{1}'.format(base, name))
+            return
+
         try:
             if not self.isModuleActive(base, name):
                 logger.error('{0} module {1} is not activated.'.format(base, name))
@@ -1002,6 +1015,7 @@ class Manager(QtCore.QObject):
             with self.lock:
                 self.tree['loaded'][base].pop(name)
             return
+
         try:
             if module.is_module_threaded:
                 success = QtCore.QMetaObject.invokeMethod(
@@ -1161,17 +1175,21 @@ class Manager(QtCore.QObject):
         for mkey in sorteddeps:
             for mbase in ('hardware', 'logic', 'gui'):
                 if mkey in self.tree['defined'][mbase] and mkey not in self.tree['loaded'][mbase]:
+                    # module defined but not yet loaded. Have to take 3 steps:
+                    # Step 1: load module's config
                     success = self.loadConfigureModule(mbase, mkey)
                     if success < 0:
                         logger.warning('Stopping module loading after loading failure.')
                         return -1
                     elif success > 0:
                         logger.warning('Nonfatal loading error, going on.')
+                    # Step 2: connect module
                     success = self.connectModule(mbase, mkey)
                     if success < 0:
                         logger.warning('Stopping loading module {0}.{1} after '
                                        'connection failure.'.format(mbase, mkey))
                         return -1
+                    # Step 3: activate module
                     if mkey in self.tree['loaded'][mbase]:
                         self.activateModule(mbase, mkey)
                 elif mkey in self.tree['defined'][mbase] and mkey in self.tree['loaded'][mbase]:
@@ -1402,7 +1420,7 @@ class Manager(QtCore.QObject):
 
         If a reference is passed that is not None, it is kept and passed out as the task runner instance.
         If a None is passed, the reference is discarded.
-        Id another reference is passed, the current one is replaced.
+        If another reference is passed, the current one is replaced.
 
         """
         with self.lock:
