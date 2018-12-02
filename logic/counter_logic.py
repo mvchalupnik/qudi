@@ -389,11 +389,19 @@ class CounterLogic(GenericLogic):
         """
         # Sanity checks
         constraints = self.get_hardware_constraints()
-        if self._counting_mode not in constraints.counting_mode:
+        # TODO: BUG FIXED HERE: introduce corresponding changes to GitHub files
+        if self._counting_mode.value not in [constraints.counting_mode[j].value for j in range(len(constraints.counting_mode))]:
             self.log.error('Unknown counting mode "{0}". Cannot start the counter.'
                            ''.format(self._counting_mode))
             self.sigCountStatusChanged.emit(False)
             return -1
+        # ORIGINAL VERSION
+        # constraints = self.get_hardware_constraints()
+        # if self._counting_mode not in constraints.counting_mode:
+        #     self.log.error('Unknown counting mode "{0}". Cannot start the counter.'
+        #                    ''.format(self._counting_mode))
+        #     self.sigCountStatusChanged.emit(False)
+        #     return -1
 
         with self.threadlock:
             # Lock module

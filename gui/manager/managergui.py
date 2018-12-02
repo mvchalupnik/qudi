@@ -609,7 +609,17 @@ class ModuleListItem(QtWidgets.QFrame):
         self.name = modulename
         self.base = basename
 
-        self.loadButton.setText('Load {0}'.format(self.name))
+        self.is_remote = ('remote' in self.manager.tree['defined'][self.base][self.name])
+        self.remote_module_loaded = False  # This flag is set to True once 'Connect to' button is clicked.
+        #                               # Needed to disable "Connect to" button after clicking once
+
+        if self.is_remote:
+            # In the case of remote module
+            self.loadButton.setText('Connect to {0}'.format(self.name))
+        else:
+            # In the case of local module
+            self.loadButton.setText('Load {0}'.format(self.name))
+
         # connect buttons
         self.loadButton.clicked.connect(self.loadButtonClicked)
         self.reloadButton.clicked.connect(self.reloadButtonClicked)
@@ -619,10 +629,14 @@ class ModuleListItem(QtWidgets.QFrame):
     def loadButtonClicked(self):
         """ Send signal to load and activate this module.
         """
-        self.sigLoadThis.emit(self.base, self.name)
+        if (not self.is_remote) or (not self.remote_module_loaded):
+            self.sigLoadThis.emit(self.base, self.name)
         
-        # Instant return to checked to prevent visual lag before checkModuleState completes
-        self.loadButton.setChecked(True)
+            # Instant return to checked to prevent visual lag before checkModuleState completes
+            self.loadButton.setChecked(True)
+            self.remote_module_loaded = True
+        else:
+            pass
 
     def reloadButtonClicked(self):
         """ Send signal to reload this module.
@@ -648,7 +662,8 @@ class ModuleListItem(QtWidgets.QFrame):
             will be updated to indicate that loading is no longer possible.
         """
         state = ''
-        if self.statusLabel.text() != 'exception, cannot get state':
+        # if self.statusLabel.text() != 'exception, cannot get state':
+        if not self.is_remote:  # local module
             try:
                 if (self.base in self.manager.tree['loaded']
                         and self.name in self.manager.tree['loaded'][self.base]):
@@ -683,4 +698,38 @@ class ModuleListItem(QtWidgets.QFrame):
                 self.deactivateButton.setEnabled(True)
                 self.cleanupButton.setEnabled(True)
 
-            self.statusLabel.setText(state)
+        else:  # remote module
+            try:
+                state = self.manager.tree['loaded'][self.base][self.name].module_state()
+
+                self.deactivateButton.setEnabled(False)
+                self.deactivateButton.setToolTip('It is prohibited to deactivate modules on a different server')
+                self.reloadButton.setToolTip('Reconnect to remote module')
+
+                if not self.remote_module_loaded:
+                    self.loadButton.setChecked(False)
+                    self.loadButton.setEnabled(True)
+                    self.loadButton.setToolTip('Connect to remote module')
+                    self.cleanupButton.setEnabled(True)
+                    self.reloadButton.setEnabled(False)
+                else:
+                    self.loadButton.setChecked(True)
+                    self.loadButton.setEnabled(True)
+                    self.loadButton.setText('Remote: {}'.format(self.name))
+                    self.loadButton.setToolTip(
+                        """Remote module has been registered already.
+                    The only allowed action now is to Reconnect to it"""
+                    )
+                    self.reloadButton.setEnabled(True)
+                    self.cleanupButton.setEnabled(False)
+            except:
+                if not self.remote_module_loaded:
+                    state = 'not loaded'
+                    self.reloadButton.setEnabled(False)
+                else:
+                    state = 'exception, cannot get state'
+                    self.reloadButton.setEnabled(True)
+                self.deactivateButton.setEnabled(False)
+                self.cleanupButton.setEnabled(True)
+
+        self.statusLabel.setText(state)
