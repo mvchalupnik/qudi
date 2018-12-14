@@ -81,9 +81,13 @@ class RNG(Base, RNGInterface):
     def return_boolean(self):
         return True
 
-    def return_1d_array(self, length=10):
+    def return_1d_array(self, length=100):
         float_list = [1e-3 * i for i in range(length)]
         return float_list
+
+    def return_1d_tuple(self, length=100):
+        float_list = [1e-3 * i for i in range(length)]
+        return tuple(float_list)
 
     def return_2d_array(self, length=10):
         array = np.zeros((length, length))
