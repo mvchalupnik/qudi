@@ -1009,7 +1009,8 @@ class AWG7k(Base, PulserInterface):
                                'present in device memory.'.format(name, waveform_tuple))
                 return -1
 
-        active_analog = sorted(chnl for chnl in self.get_active_channels() if chnl.startswith('a'))
+        active_analog = sorted(chnl for chnl in self.get_active_channels() if
+                               (chnl.startswith('a') and (self.get_active_channels()[chnl] == True)))
         num_tracks = len(active_analog)
         num_steps = len(sequence_parameter_list)
 
