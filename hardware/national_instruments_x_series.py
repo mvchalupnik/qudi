@@ -44,47 +44,63 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
 
     Example config for copy-paste:
 
-    nicard_6343:
+    nicard_6363:
         module.Class: 'national_instruments_x_series.NationalInstrumentsXSeries'
-        photon_sources:
-            - '/Dev1/PFI8'
-        #    - '/Dev1/PFI9'
-        clock_channel: '/Dev1/Ctr0'
+
+        # ========= Common config =========
+        read_write_timeout: 10
+        max_counts: 3e7
+        counting_edge_rising: True  # not used in the code
+        default_samples_number: 50  # not used in the code
+
+
+        # ========= SlowCounter config =========
+        # == SampleClock ==
+        clock_channel: '/PXI-6363/Ctr0'  # The hardware counter, which will generate SampleClock signal for the counter
         default_clock_frequency: 100 # optional, in Hz
+
+        # == Counter ==
         counter_channels:
-            - '/Dev1/Ctr1'
-        counter_ai_channels:
-            - '/Dev1/AI0'
+            - '/PXI-6363/Ctr1'  # The hardware counter, which will count photon clicks
+        photon_sources:
+           - '/PXI-6363/PFI3'
+        #                                   counter_ai_channels:  # Not available im NI PXIe-6363
+        #                                       - '/Dev1/AI0'
+
+
+        # ========= ConfocalScanner config =========
+        # == SampleClock ==
+        scanner_clock_channel: '/PXI-6363/Ctr2'  # The hardware counter, which will generate SampleClock for the scanner
         default_scanner_clock_frequency: 100 # optional, in Hz
-        scanner_clock_channel: '/Dev1/Ctr2'
-        pixel_clock_channel: '/Dev1/PFI6'
+        #                 pixel_clock_channel: '/Dev1/PFI6'  # Physical terminal to output scanner SampleClock signal
+
+        # == ScannerAO ==
         scanner_ao_channels:
-            - '/Dev1/AO0'
-            - '/Dev1/AO1'
-            - '/Dev1/AO2'
-            - '/Dev1/AO3'
-        scanner_ai_channels:
-            - '/Dev1/AI1'
-        scanner_counter_channels:
-            - '/Dev1/Ctr3'
+            - '/PXI-6363/AO0'
+            - '/PXI-6363/AO1'
+            - '/PXI-6363/AO2'
         scanner_voltage_ranges:
-            - [-10, 10]
-            - [-10, 10]
-            - [-10, 10]
-            - [-10, 10]
+            - [-0.4, 0.4]
+            - [-0.4, 0.4]
+            - [0, 10]
         scanner_position_ranges:
             - [0e-6, 200e-6]
             - [0e-6, 200e-6]
             - [-100e-6, 100e-6]
-            - [-10, 10]
 
-        odmr_trigger_channel: '/Dev1/PFI7'
+        # == Scanner's Counter ==
+        scanner_counter_channels:
+            - '/PXI-6363/Ctr3'
+        #                               scanner_ai_channels:  # Not available im NI PXIe-6363
+        #                                   - '/Dev1/AI1'
 
-        gate_in_channel: '/Dev1/PFI9'
-        default_samples_number: 50
-        max_counts: 3e7
-        read_write_timeout: 10
-        counting_edge_rising: True
+
+        # =============== ODMR ===============
+        odmr_trigger_channel: '/PXI-6363/PFI14'
+
+
+        # ====== gated Slow counter config ========
+        gate_in_channel: '/PXI-6363/PFI9'
 
     """
 
@@ -1070,7 +1086,7 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
         @param float[][n] voltages: array of n-part tuples defining the voltage
                                     points
         @param int length: number of tuples to write
-        @param bool start: write imediately (True)
+        @param bool start: write immediately (True)
                            or wait for start of task (False)
 
         n depends on how many channels are configured for analog output
@@ -1300,7 +1316,7 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
                     self._pixel_clock_channel,
                     daq.DAQmx_Val_DoNotInvertPolarity)
 
-            # start the scanner counting task that acquires counts synchroneously
+            # start the scanner counting task that acquires counts synchronously
             for i, task in enumerate(self._scanner_counter_daq_tasks):
                 daq.DAQmxStartTask(task)
 
