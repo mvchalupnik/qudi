@@ -160,7 +160,7 @@ class PulserInterface(metaclass=InterfaceMetaclass):
                                     waveform to load into the channel.
                                     Examples:   {1: rabi_ch1, 2: rabi_ch2} or
                                                 {1: rabi_ch2, 2: rabi_ch1}
-                                    If just a list of waveform names if given, the channel
+                                    If just a list of waveform names is given, the channel
                                     association will be invoked from the channel
                                     suffix '_ch1', '_ch2' etc.
 
@@ -431,7 +431,7 @@ class PulserInterface(metaclass=InterfaceMetaclass):
                                      values are 1D numpy arrays of type bool containing the marker
                                      states.
         @param bool is_first_chunk: Flag indicating if it is the first chunk to write.
-                                    If True this method will create a new empty wavveform.
+                                    If True this method will create a new empty waveform.
                                     If False the samples are appended to the existing waveform.
         @param bool is_last_chunk:  Flag indicating if it is the last chunk to write.
                                     Some devices may need to know when to close the appending wfm.
@@ -557,6 +557,5 @@ class PulserConstraints:
         self.repetitions = ScalarConstraint(unit='#')
         self.event_triggers = list()
         self.flags = list()
-
 
         self.activation_config = dict()

@@ -557,13 +557,13 @@ class SequenceGeneratorLogic(GenericLogic):
 
         @param set activation_config: A set of channels to set active (all others inactive)
         """
-        channel_state = self.pulsegenerator().get_active_channels()
-        for chnl in channel_state:
+        channel_state_dict = self.pulsegenerator().get_active_channels()
+        for chnl in channel_state_dict:
             if chnl in activation_config:
-                channel_state[chnl] = True
+                channel_state_dict[chnl] = True
             else:
-                channel_state[chnl] = False
-        set_state = self.pulsegenerator().set_active_channels(channel_state)
+                channel_state_dict[chnl] = False
+        set_state = self.pulsegenerator().set_active_channels(channel_state_dict)
         set_config = set([chnl for chnl in set_state if set_state[chnl]])
         return set_config
 
