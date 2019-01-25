@@ -502,7 +502,7 @@ class AWG7k(Base, PulserInterface):
             for chnl in amplitude:
                 if chnl not in analog_channels:
                     self.log.warning('Channel "{0}" to set is not available in AWG.\nSetting '
-                                     'analogue voltage for this channel ignored.'.format(chnl))
+                                     'analog voltage for this channel ignored.'.format(chnl))
                     chnl_del_list.append(chnl)
                 elif amplitude[chnl] < constraints.a_ch_amplitude.min:
                     self.log.warning('Minimum Vpp for channel "{0}" is {1}. Requested Vpp of {2} V '
