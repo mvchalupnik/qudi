@@ -452,6 +452,28 @@ class PulserInterface(metaclass=InterfaceMetaclass):
         @param dict sequence_parameters: dictionary containing the parameters for a sequence
 
         @return: int, number of sequence steps written (-1 indicates failed process)
+
+        EXPLANATIONS
+
+        sequence_parameters = [
+            (('stp1_wfm_ch1', 'stp1_wfm_ch2'), {'repetitions': #, 'wait_for': #, 'go_to': #, 'event_jump_to': #}),
+            (('stp2_wfm_ch1', 'stp2_wfm_ch2'), {'repetitions': #, 'wait_for': #, 'go_to': #, 'event_jump_to': #}),
+        ]
+
+        Meaning of the parameter dictionary entries:
+        'repetitions': -1 -- infinite; 0 and 1 -- once; 2 -- twice; ...
+        'wait_for': 'ON' or 'OFF'
+        'go_to': positive integer - number of sequence element to go to after completing palying elem_num,
+                 negative integer and 0 - disable GoTo
+        'event_jump_to': positive int -- jump destination; 0 -- NEXT; -1 -- events ignored, no jump from this element
+
+        Usage example:
+        seq_param_list = [
+            (('test1_ch1', 'test1_ch2'), {'repetitions': -1, 'wait_for': 'OFF', 'go_to': 1, 'event_jump_to': 0}),
+            (('test2_ch1', 'test2_ch2'), {'repetitions': 100, 'wait_for': 'ON', 'go_to': 1, 'event_jump_to': 1}),
+        ]
+        awg_instance_name.write_sequence('sequence_name', seq_param_list)
+
         """
         pass
 
