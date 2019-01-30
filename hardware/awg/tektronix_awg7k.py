@@ -29,6 +29,7 @@ import visa
 import numpy as np
 from ftplib import FTP
 from collections import OrderedDict
+import copy
 
 from core.util.modules import get_home_dir
 from core.module import Base, ConfigOption
@@ -848,7 +849,7 @@ class AWG7k(Base, PulserInterface):
         to activate analog channel 2 digital channel 3 and 4 and to deactivate
         digital channel 1. All other available channels will remain unchanged.
         """
-        current_ch_state_dict = self._ch_state_dict.copy()
+        current_ch_state_dict = copy.deepcopy(self._ch_state_dict)
 
         if ch is None:
             return current_ch_state_dict
@@ -859,7 +860,7 @@ class AWG7k(Base, PulserInterface):
             return current_ch_state_dict
 
         # Determine new channel activation states
-        new_ch_state_dict = current_ch_state_dict.copy()
+        new_ch_state_dict = copy.deepcopy(current_ch_state_dict)
         for chnl in ch:
             new_ch_state_dict[chnl] = ch[chnl]
 
@@ -903,7 +904,7 @@ class AWG7k(Base, PulserInterface):
         analog_channels = self._get_all_analog_channels()
         digital_channels = self._get_all_digital_channels()
 
-        ch_state_dict = self._ch_state_dict.copy()
+        ch_state_dict = copy.deepcopy(self._ch_state_dict)
 
         # return either all channel information or just the ones asked for.
         if ch is not None:
@@ -1047,7 +1048,7 @@ class AWG7k(Base, PulserInterface):
 
         """
 
-        ch_state_dict = self._ch_state_dict
+        ch_state_dict = copy.deepcopy(self._ch_state_dict)
         anlg_ch_list = self._get_all_analog_channels()
 
         for anlg_ch_name in anlg_ch_list:
@@ -1068,14 +1069,14 @@ class AWG7k(Base, PulserInterface):
             else:
                 self.write('OUTPUT{0:d}:STATE OFF'.format(anlg_ch_num))
 
-        # Check that the final state coincides with the expected self._ch_state_dict
+        # Check that the final state coincides with the expected ch_state_dict
         actual_ch_state = self._get_channel_state()
-        if actual_ch_state != self._ch_state_dict:
+        if actual_ch_state != ch_state_dict:
             # Log a readable error message
             # What was expected
             exp_state_dict = dict()
-            for ch_name in sorted(self._ch_state_dict):
-                exp_state_dict[ch_name] = self._ch_state_dict[ch_name]
+            for ch_name in sorted(ch_state_dict):
+                exp_state_dict[ch_name] = ch_state_dict[ch_name]
             # What was obtained
             obt_state_dict = dict()
             for ch_name in sorted(actual_ch_state):
