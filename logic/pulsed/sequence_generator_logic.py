@@ -323,9 +323,6 @@ class SequenceGeneratorLogic(GenericLogic):
                 available_configs_dict = self.pulse_generator_constraints.activation_config
                 final_state_set = None
 
-                self.log.debug('Type: {}'.format(type(activation_config)))
-                self.log.debug('Value: {}'.format(activation_config))
-
                 # Allow argument types str, set and tuple
                 if isinstance(activation_config, str):
                     # THIS PART IS NORMALLY USED BY pulsedmasterlogic
@@ -423,17 +420,8 @@ class SequenceGeneratorLogic(GenericLogic):
                                              '"{0}" to be changed to "{1}".'.format(setting_name,
                                                                                     new_channel))
                             changed_generation_parameters[setting_name] = new_channel
-
-                            self.generation_parameters = changed_generation_parameters
-
-                # Apply potential changes to generation_parameters
-                try:
-                    if changed_generation_parameters:
-                        # @generation_parameters.setter redirects handling of the below assignemnt
-                        # to self.set_generation_parameters method
-                        self.generation_parameters = changed_generation_parameters
-                except UnboundLocalError:
-                    pass
+                            # changed_generation_parameters will be applied to self.generation_parameters
+                            # on the bottom of the mehod
 
             if 'sample_rate' in settings_dict:
                 self.__sample_rate = self.pulsegenerator().set_sample_rate(
@@ -459,14 +447,14 @@ class SequenceGeneratorLogic(GenericLogic):
 
         # emit update signal for master (GUI or other logic module)
         self.sigGeneratorSettingsUpdated.emit(self.pulse_generator_settings)
-        # # Apply potential changes to generation_parameters
-        # try:
-        #     if changed_generation_parameters:
-        #         # @generation_parameters.setter redirects handling of the below assignemnt
-        #         # to self.set_generation_parameters method
-        #         self.generation_parameters = changed_generation_parameters
-        # except UnboundLocalError:
-        #     pass
+        # Apply potential changes to generation_parameters
+        try:
+            if changed_generation_parameters:
+                # @generation_parameters.setter redirects handling of the below assignemnt
+                # to self.set_generation_parameters method
+                self.generation_parameters = changed_generation_parameters
+        except UnboundLocalError:
+            pass
         return self.pulse_generator_settings
 
     @QtCore.Slot()
