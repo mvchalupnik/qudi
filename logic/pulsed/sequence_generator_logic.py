@@ -450,7 +450,7 @@ class SequenceGeneratorLogic(GenericLogic):
         # Apply potential changes to generation_parameters
         try:
             if changed_generation_parameters:
-                # @generation_parameters.setter redirects handling of the below assignemnt
+                # @generation_parameters.setter redirects handling of the below assignment
                 # to self.set_generation_parameters method
                 self.generation_parameters = changed_generation_parameters
         except UnboundLocalError:

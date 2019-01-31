@@ -927,16 +927,33 @@ class AWG7k(Base, PulserInterface):
                                  class variable status_dic.)
         """
 
-        # If AWG is already running, do nothing
-        # else, enable all requested channels and push "Run"
+        # Activate channels according to self._ch_state_dict
+        self._activate_channels()
+
+        # If pulse synthesizer is already running, do nothing else, push "Run"
         if not self._is_output_on():
-            # Activate channels according to self._ch_state_dict
-            self._activate_channels()
             # Push "Run" button
             self.write('AWGC:RUN')
             # wait until the AWG is actually running
+            loop_count = 0
             while not self._is_output_on():
                 time.sleep(0.2)
+
+                # This part is needed to prevent trapping in an infinite loop.
+                # One example of when it might be needed is sequence generation:
+                # if a pulse sequence is finite and very short, soon after self.write('AWGC:RUN')
+                # the AWG finishes playing and is back to OFF state. If the state check in
+                #       while not self._is_output_on()
+                # happens too late (a few ms late), self._is_output_on() always gives False,
+                # and one gets trapped in the loop.
+                # To avoid this, limit on loop_count is introduced
+                loop_count += 1
+                if loop_count >= 5:
+                    self.log.warn('AWG7k.pulser_on(): I was waiting for AWG to switch on for 1 sec.\n'
+                                  'Somehow AWG._is_output_on() gives False every time I ask.\n'
+                                  'Might be that the sequence/waveform was very short and AWG has already finished.\n'
+                                  'AWG7k.pulser_on() stops running in the loop and quits.')
+                    break
 
             self.get_errors(level='warn')
 
@@ -959,11 +976,11 @@ class AWG7k(Base, PulserInterface):
             while self._is_output_on():
                 time.sleep(0.2)
 
-            # Physically switch off all analog channels
-            anlg_ch_list = self._get_all_analog_channels()
-            for ch_name in anlg_ch_list:
-                ch_num = int(ch_name.rsplit('_ch', 1)[1])
-                self.write('OUTPUT{0}:STATE OFF'.format(ch_num))
+        # Physically switch off all analog channels
+        anlg_ch_list = self._get_all_analog_channels()
+        for ch_name in anlg_ch_list:
+            ch_num = int(ch_name.rsplit('_ch', 1)[1])
+            self.write('OUTPUT{0}:STATE OFF'.format(ch_num))
 
         self.get_errors(level='warn')
 
