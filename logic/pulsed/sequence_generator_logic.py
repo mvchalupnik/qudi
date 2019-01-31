@@ -122,6 +122,7 @@ class SequenceGeneratorLogic(GenericLogic):
         # current pulse generator settings that are frequently used by this logic.
         # Save them here since reading them from device every time they are used may take some time.
         self.__activation_config = ('', set())  # Activation config name and set of active channels
+                                                # (inactive channel keys are not included into the set)
         self.__sample_rate = 0.0  # Sample rate in samples/s
         self.__analog_levels = (dict(), dict())  # Tuple of two dict (<pp_amplitude>, <offset>)
                                                  # Dict keys are analog channel descriptors
@@ -304,6 +305,8 @@ class SequenceGeneratorLogic(GenericLogic):
         @param settings_dict:
         @param kwargs:
         @return:
+
+        settings_dict['activation_config'] - see the comments in the code for explanations of possible formats
         """
         # Check if pulse generator is running and do nothing if that is the case
         pulser_status, status_dict = self.pulsegenerator().get_status()
@@ -317,60 +320,120 @@ class SequenceGeneratorLogic(GenericLogic):
             # Set parameters if present
             if 'activation_config' in settings_dict:
                 activation_config = settings_dict['activation_config']
-                available_configs = self.pulse_generator_constraints.activation_config
-                set_config = None
+                available_configs_dict = self.pulse_generator_constraints.activation_config
+                final_state_set = None
+
+                self.log.debug('Type: {}'.format(type(activation_config)))
+                self.log.debug('Value: {}'.format(activation_config))
+
                 # Allow argument types str, set and tuple
                 if isinstance(activation_config, str):
-                    if activation_config in available_configs.keys():
-                        set_config = self._apply_activation_config(
-                            available_configs[activation_config])
-                        self.__activation_config = (activation_config, set_config)
+                    # THIS PART IS NORMALLY USED BY pulsedmasterlogic
+                    # In this case the activation_config is a name of one of the allowed channel configurations.
+                    # To find out the set of channel configurations, available on a specific pulser, run
+                    #       pulser_instance_name.get_constraints().activation_config.keys()
+                    # For example, for tektronix_awg7k the valid values are:
+                    #       'none', 'all', 'A1_M1_M2', 'A2_M3_M4', 'Two_Analog', 'Analog1',
+                    #       'Analog2', 'A1_M1_M2_A2', and 'A1_A2_M3_M4'
+
+                    activation_config_name = activation_config
+                    if activation_config_name in available_configs_dict.keys():
+                        final_state_set = self._apply_activation_config(
+                            available_configs_dict[activation_config_name])
+                        self.__activation_config = (activation_config_name, final_state_set)
                     else:
                         self.log.error('Unable to set activation config by name.\n'
                                        '"{0}" not found in pulser constraints.'
                                        ''.format(activation_config))
-                elif isinstance(activation_config, set):
-                    if activation_config in available_configs.values():
-                        set_config = self._apply_activation_config(activation_config)
-                        config_name = list(available_configs)[
-                            list(available_configs.values()).index(activation_config)]
-                        self.__activation_config = (config_name, set_config)
-                    else:
-                        self.log.error('Unable to set activation config "{0}".\n'
-                                       'Not found in pulser constraints.'.format(activation_config))
-                elif isinstance(activation_config, tuple):
-                    if activation_config in available_configs.items():
-                        set_config = self._apply_activation_config(activation_config[1])
-                        self.__activation_config = (activation_config[0], set_config)
-                    else:
-                        self.log.error('Unable to set activation config "{0}".\n'
-                                       'Not found in pulser constraints.'.format(activation_config))
-                # Check if the ultimately set config is part of the constraints
-                if set_config is not None and set_config not in available_configs.values():
-                    self.log.error('Something went wrong while setting new activation config.')
-                    self.__activation_config = ('', set_config)
 
-                # search the generation_parameters for channel specifiers and adjust them if they
-                # are no longer valid
-                changed_settings = dict()
-                ana_chnls = sorted(self.analog_channels, key=lambda ch: int(ch.split('ch')[-1]))
-                digi_chnls = sorted(self.digital_channels, key=lambda ch: int(ch.split('ch')[-1]))
-                for name in [setting for setting in self.generation_parameters if
-                             setting.endswith('_channel')]:
-                    channel = self.generation_parameters[name]
-                    if isinstance(channel, str) and channel not in self.__activation_config[1]:
-                        if channel.startswith('a'):
-                            new_channel = ana_chnls[0] if ana_chnls else digi_chnls[0]
-                        elif channel.startswith('d'):
-                            new_channel = digi_chnls[0] if digi_chnls else ana_chnls[0]
+                elif isinstance(activation_config, set):
+                    # In this case activation_config is a set of channel names to be active.
+                    # All other channels (not mentioned in the set) will be deactivated.
+                    # To find out the active channel sets, available on a specific pulser, run
+                    #       pulser_instance_name.get_constraints().activation_config.values()
+                    # A few examples of valid values for tektronix_awg7k:
+                    #       set(), {'a_ch1', 'a_ch2', 'd_ch1', 'd_ch2', 'd_ch3', 'd_ch4'},
+                    #       {'a_ch1', 'd_ch1', 'd_ch2'}
+
+                    active_channel_set = activation_config
+                    if active_channel_set in available_configs_dict.values():
+                        final_state_set = self._apply_activation_config(active_channel_set)
+                        config_name = list(available_configs_dict)[
+                            list(available_configs_dict.values()).index(active_channel_set)]
+                        self.__activation_config = (config_name, final_state_set)
+                    else:
+                        self.log.error('Unable to set activation config by set.\n'
+                                       'The requested set: "{0}".\n'
+                                       'is not found in pulser constraints.'.format(active_channel_set))
+
+                elif isinstance(activation_config, tuple):
+                    # In this case activation_config is a tuple
+                    # ('active_channel_config_name', {'set', 'of', 'active', 'channel', 'names'})
+                    # To find out the active channel configurations, available on a specific pulser, run
+                    #       pulser_instance_name.get_constraints().activation_config.items()
+                    # A few examples of valid values for tektronix_awg7k:
+                    #       ('all', {'a_ch1', 'a_ch2', 'd_ch1', 'd_ch2', 'd_ch3', 'd_ch4'})
+                    #       ('Two_Analog', {'a_ch1', 'a_ch2'})
+
+                    activation_config_tuple = activation_config
+                    if activation_config_tuple in available_configs_dict.items():
+                        final_state_set = self._apply_activation_config(activation_config_tuple[1])
+                        self.__activation_config = (activation_config_tuple[0], final_state_set)
+                    else:
+                        self.log.error('Unable to set activation config by tuple.\n'
+                                       'The configuration: "{}".\n'
+                                       'is not found in pulser constraints.'.format(activation_config_tuple))
+
+                # Check if the ultimately set config is a part of the constraints
+                if final_state_set is not None and final_state_set not in available_configs_dict.values():
+                    self.log.error('Something went wrong while setting new activation config.')
+                    self.__activation_config = ('', final_state_set)
+
+                # Auto-correct self.generation_parameters, if needed:
+                #
+                # If some channel was used as "Laser channel", "Sync channel", "Gate channel", or "Microwave channel"
+                # and after the activation_config change it is not active any longer,
+                # the code below automatically substitues the "XXX channel" with a default value:
+                #       if analog channel was used: a_ch1 (or d_ch1, if a_ch1 is not active)
+                #       if digital channel was used: d_ch1 (or a_ch1, if d_ch1 is not active)
+
+                active_anlg_chnls = sorted(self.analog_channels, key=lambda ch: int(ch.split('ch')[-1]))
+                active_digi_chnls = sorted(self.digital_channels, key=lambda ch: int(ch.split('ch')[-1]))
+
+                generation_params_dict = self.generation_parameters
+                changed_generation_parameters = dict()
+
+                for setting_name in [setting_key for setting_key in generation_params_dict if
+                                     setting_key.endswith('_channel')]:
+                    channel_name = generation_params_dict[setting_name]
+                    if isinstance(channel_name, str) and channel_name not in self.__activation_config[1]:
+                        # The channel channel_name is mentioned in setting_name setting ("XXX channel" setting),
+                        # but now it is not active.
+                        # This happens when the channel was just deactivated by the code above.
+                        # Now one has to set some other channel as "XXX channel"
+                        if channel_name.startswith('a'):
+                            new_channel = active_anlg_chnls[0] if active_anlg_chnls else active_digi_chnls[0]
+                        elif channel_name.startswith('d'):
+                            new_channel = active_digi_chnls[0] if active_digi_chnls else active_anlg_chnls[0]
                         else:
                             continue
 
                         if new_channel is not None:
                             self.log.warning('Change of activation config caused sampling_setting '
-                                             '"{0}" to be changed to "{1}".'.format(name,
+                                             '"{0}" to be changed to "{1}".'.format(setting_name,
                                                                                     new_channel))
-                            changed_settings[name] = new_channel
+                            changed_generation_parameters[setting_name] = new_channel
+
+                            self.generation_parameters = changed_generation_parameters
+
+                # Apply potential changes to generation_parameters
+                try:
+                    if changed_generation_parameters:
+                        # @generation_parameters.setter redirects handling of the below assignemnt
+                        # to self.set_generation_parameters method
+                        self.generation_parameters = changed_generation_parameters
+                except UnboundLocalError:
+                    pass
 
             if 'sample_rate' in settings_dict:
                 self.__sample_rate = self.pulsegenerator().set_sample_rate(
@@ -396,12 +459,14 @@ class SequenceGeneratorLogic(GenericLogic):
 
         # emit update signal for master (GUI or other logic module)
         self.sigGeneratorSettingsUpdated.emit(self.pulse_generator_settings)
-        # Apply potential changes to generation_parameters
-        try:
-            if changed_settings:
-                self.generation_parameters = changed_settings
-        except UnboundLocalError:
-            pass
+        # # Apply potential changes to generation_parameters
+        # try:
+        #     if changed_generation_parameters:
+        #         # @generation_parameters.setter redirects handling of the below assignemnt
+        #         # to self.set_generation_parameters method
+        #         self.generation_parameters = changed_generation_parameters
+        # except UnboundLocalError:
+        #     pass
         return self.pulse_generator_settings
 
     @QtCore.Slot()
@@ -563,9 +628,9 @@ class SequenceGeneratorLogic(GenericLogic):
                 channel_state_dict[chnl] = True
             else:
                 channel_state_dict[chnl] = False
-        set_state = self.pulsegenerator().set_active_channels(channel_state_dict)
-        set_config = set([chnl for chnl in set_state if set_state[chnl]])
-        return set_config
+        final_state_dict = self.pulsegenerator().set_active_channels(channel_state_dict)
+        final_state_set = set([chnl for chnl in final_state_dict if final_state_dict[chnl]])
+        return final_state_set
 
     ############################################################################
     # Waveform/Sequence generation control methods and properties

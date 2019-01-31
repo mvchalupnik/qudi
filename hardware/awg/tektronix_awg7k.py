@@ -366,8 +366,6 @@ class AWG7k(Base, PulserInterface):
         # channels. Here all possible channel configurations are stated, where only the generic
         # names should be used. The names for the different configurations can be customary chosen.
         activation_config = OrderedDict()
-        # All channels deactivated
-        activation_config[''] = set()  # {'a_ch1', 'a_ch2'} has "set()" type. Thus empty {} is set()
         # All channels activated
         activation_config['all'] = {'a_ch1', 'd_ch1', 'd_ch2', 'a_ch2', 'd_ch3', 'd_ch4'}
         # Usage of channel 1 only:
@@ -1577,16 +1575,18 @@ class AWG7k(Base, PulserInterface):
 
     # ================ Sequence ================
 
-    def write_sequence(self, name, sequence_parameter_list):
+    def write_sequence(self, name, sequence_parameters):
         """
         Write a new sequence on the device memory.
 
         @param name: str, the name of the waveform to be created/append to
-        @param sequence_parameter_list: list, contains the parameters for each sequence step and
+        @param sequence_parameters: list, contains the parameters for each sequence step and
                                         the according waveform names.
 
         @return: int, number of sequence steps written (-1 indicates failed process)
         """
+        sequence_parameter_list = sequence_parameters  # introduce new name to append _list suffix for clarity
+
         # Check if device has sequencer option installed
         if not self.has_sequence_mode():
             self.log.error('Direct sequence generation is not possible on this AWG: sequencer option is not installed.')
@@ -1963,7 +1963,7 @@ class AWG7k(Base, PulserInterface):
 
         return self._written_sequences
 
-    def delete_sequence(self, sequence_name=None):
+    def delete_sequence(self, sequence_name):
         """ Delete the sequence with name "sequence_name" from the device memory.
 
         @param str sequence_name: The name of the sequence to be deleted
