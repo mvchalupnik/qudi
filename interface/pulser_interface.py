@@ -223,6 +223,22 @@ class PulserInterface(metaclass=InterfaceMetaclass):
         @return (dict, str): Dictionary with keys being the channel number and values being the
                              respective asset loaded into the channel,
                              string describing the asset type ('waveform' or 'sequence')
+
+        EXPLANATION
+        This method is only called in sequence_generator_logic.loaded_asset() property getter
+
+        sequence_generator_logic.loaded_asset() expects the to get the following:
+            -- the mode str:
+                only two valid values: 'waveform' and 'sequence'
+                If something else is encountered, sequence_generator_logic.loaded_asset() returns ("", "")
+            -- the dict:
+                -- keys of the dictionary do not matter - the are not accessed at all
+                -- all the values are assumed to be strings of the following format:
+                            'common_waveform_name_ch1', 'common_waveform_name_ch2' and so on.
+                All elements are expected to have the same part 'common_waveform_name' (everything before last _)
+                                                                                        and differ only in 'ch#'.
+                If any element has different 'common part', sequence_generator_logic.loaded_asset() returns ("", "")
+                Number of elements does not matter - only list(dict.values())[0] is used.
         """
         pass
 
@@ -241,6 +257,14 @@ class PulserInterface(metaclass=InterfaceMetaclass):
         @return (int, dict): tuple with an integer value of the current status and a corresponding
                              dictionary containing status description for all the possible status
                              variables of the pulse generator hardware.
+
+        Purpose explanation:
+        get_status()[0] is called by sequence_generator_logic (only, no other logic modules use it)
+                        before applying any setting changes to make sure that the pulser is not running right now.
+
+        Returned 0 means the pulser is idle and it's safe to apply new settings;
+        Positive values mean different states when pusler is running - no changes should be made in this case;
+        Negative values mean communication error - connection to instrument lost, for example.
         """
         pass
 

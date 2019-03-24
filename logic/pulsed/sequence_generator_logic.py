@@ -291,6 +291,7 @@ class SequenceGeneratorLogic(GenericLogic):
                 if name.rsplit('_', 1)[0] != return_name:
                     return '', ''
         else:
+            # TODO: in subclass for NI card add 'script' mode
             return '', ''
         return return_name, return_type
 
@@ -621,7 +622,7 @@ class SequenceGeneratorLogic(GenericLogic):
         return final_state_set
 
     ############################################################################
-    # Waveform/Sequence generation control methods and properties
+    # Waveform/Sequence construction (generation control) methods and properties
     ############################################################################
     @property
     def generate_methods(self):
