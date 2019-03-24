@@ -173,12 +173,12 @@ class AWG70K(Base, PulserInterface):
         constraints.a_ch_amplitude.max = 0.5
         constraints.a_ch_amplitude.step = 0.0001
         constraints.a_ch_amplitude.default = 0.5
-        # FIXME: Enter the proper digital channel low constraints:
+
         constraints.d_ch_low.min = -1.4
         constraints.d_ch_low.max = 0.9
         constraints.d_ch_low.step = 0.1e-3
         constraints.d_ch_low.default = 0.0
-        # FIXME: Enter the proper digital channel high constraints:
+
         constraints.d_ch_high.min = -0.9
         constraints.d_ch_high.max = 1.4
         constraints.d_ch_high.step = 0.1e-3
@@ -188,8 +188,12 @@ class AWG70K(Base, PulserInterface):
 
         constraints.waveform_length.min = self.__min_waveform_length
         constraints.waveform_length.max = self.__max_waveform_length
-        constraints.waveform_length.step = 1
-        constraints.waveform_length.default = 1
+        if self.awg_model == 'AWG70002A':
+            constraints.waveform_length.step = 1
+            constraints.waveform_length.default = 1
+        elif self.awg_model == 'AWG70001A':
+            constraints.waveform_length.step = 2
+            constraints.waveform_length.default = 2
 
         # FIXME: Check the proper number for your device
         constraints.waveform_num.min = 1
@@ -475,12 +479,8 @@ class AWG70K(Base, PulserInterface):
                                    '"{1}".'.format(seq_step.go_to, num_steps))
                     return -1
             # Set flag states
-            if seq_step.flag_trigger != 'OFF':
-                    flag_list = [seq_step.flag_trigger]
-                    self.sequence_set_flags(name, step, flag_list, True)
-            elif seq_step.flag_high != 'OFF':
-                flag_list = [seq_step.flag_high]
-                self.sequence_set_flags(name, step, flag_list, False)
+            if len(seq_step.flag_trigger) + len(seq_step.flag_high) > 0:
+                self.sequence_set_flags(name, step, seq_step.flag_trigger, seq_step.flag_high)
 
         # Wait for everything to complete
         while int(self.query('*OPC?')) != 1:
@@ -1372,16 +1372,16 @@ class AWG70K(Base, PulserInterface):
         self.write('SLIS:SEQ:STEP{0:d}:WINP "{1}", {2}'.format(step, sequence_name, trigger))
         return 0
 
-    def sequence_set_flags(self, sequence_name, step, flags=None, trigger=False):
+    def sequence_set_flags(self, sequence_name, step, flags_t=None, flags_h=None):
         """
         Set the flags in "flags" to HIGH (trigger=False) during the sequence step or let the flags
         send out a fixed duration trigger pulse (trigger=True). All other flags are set to LOW.
 
         @param str sequence_name: Name of the sequence to be edited
         @param int step: Sequence step to be edited
-        @param list flags: List of flag specifiers to be active during this sequence step
-        @param bool trigger: Whether the flag should be HIGH during the step (False) or send out a
-                             fixed length trigger pulse when starting to play the step (True).
+        @param list flags_t: List of flag trigger specifiers to be active during this sequence step, if both options are
+                             selected, the flag is set to trigger (PULS)
+        @param list flags_h: List of flag high specifiers to be active during this sequence step
 
         @return int: error code
         """
@@ -1391,8 +1391,10 @@ class AWG70K(Base, PulserInterface):
             return -1
 
         for flag in ('A', 'B', 'C', 'D'):
-            if flag in flags:
-                state = 'PULS' if trigger else 'HIGH'
+            if flag in flags_t:
+                state = 'PULS'
+            elif flag in flags_h:
+                state = 'HIGH'
             else:
                 state = 'LOW'
 
