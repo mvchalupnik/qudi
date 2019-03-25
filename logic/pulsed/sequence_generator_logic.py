@@ -1538,11 +1538,12 @@ class SequenceGeneratorLogic(GenericLogic):
     def _sampling_ensemble_sanity_check(self, ensemble):
         blocks_missing = set()
         channel_activation_mismatch = False
-        for block_name, reps in ensemble.block_list:
-            block = self._saved_pulse_blocks.get(block_name)
+        for block, reps in ensemble.block_list:
+        # for block_name, reps in ensemble.block_list:
+        #     block = self._saved_pulse_blocks.get(block_name)
             # Check if block is present
             if block is None:
-                blocks_missing.add(block_name)
+                blocks_missing.add(block.name)
                 continue
             # Check for matching channel activation
             if block.channel_set != self.__activation_config[1]:
