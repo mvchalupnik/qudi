@@ -83,7 +83,7 @@ class SITimeTaggerBase(Base):
 
     # Class-wide dictionary, containing references to all SI TimeTagger devices, used by any of the modules
     #   keys are serial number strings, values - references to device objects
-    __device_ref_dict = dict()
+    _device_ref_dict = dict()
 
     # Config Options
     # Serial number of the device
@@ -92,12 +92,17 @@ class SITimeTaggerBase(Base):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.log.debug('SITimeTaggerBase.__init__()')
+
         # Internal variables
         self._serial_str = ''  # serial number of the device, to which this module is connected
 
     def on_activate(self):
         # Populate serial number string attribute
         self._serial_str = self._cfg_serial_str
+
+        self.log.debug('on_activate(): self._tagger = {}'.format(self._tagger))
+        self.log.debug('on_activate(): SITimeTaggerBase._device_ref_dict = {}'.format(SITimeTaggerBase._device_ref_dict))
 
         # Connect to the device with serial number self._serial_str
         op_status = self.connect_to_device()
@@ -128,20 +133,23 @@ class SITimeTaggerBase(Base):
         """
 
         serial_str = self._serial_str
-        if serial_str in self.__device_ref_dict.keys():
-            return self.__device_ref_dict[serial_str]
+        if serial_str in SITimeTaggerBase._device_ref_dict.keys():
+            return SITimeTaggerBase._device_ref_dict[serial_str]
         else:
             return None
 
-    @classmethod
-    def add_device(cls, serial_str):
+    # @classmethod
+    @staticmethod
+    def add_device(serial_str):
         """
         Connect to device with serial number serial_str.
 
         :param serial_str: serial number of the device
+
         :return: (int) operation_status: 0 - OK
                                         -1 - Error
         """
+
         tagger = TT.createTimeTagger(serial_str)
 
         if tagger is None:
@@ -150,14 +158,19 @@ class SITimeTaggerBase(Base):
             return -1
         else:
             # Add the reference to the class-wide dictionary
-            cls.__device_ref_dict[serial_str] = tagger
+            SITimeTaggerBase._device_ref_dict[serial_str] = tagger
             # Reset device
             tagger.reset()
 
             return 0
 
+    @staticmethod
+    def test_add_something_to_class_dict(name, value):
+        SITimeTaggerBase._device_ref_dict[name] = value
+
     def connect_to_device(self):
-        """Connect to tagger is necessary.
+        """
+        Connect to tagger is necessary.
 
         This method determines if __device_ref_dict contains a reference
         to the device with serial number self._serial_str. If not,
@@ -462,7 +475,13 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
     # [positive/negative channel number - count while gate is high/low]
     _cfg_gate_channel = ConfigOption(name='gate_channel', missing='error')
 
+    _test_dict = {}
+    _test_class_var = 0
+
     def __init__(self, config, **kwargs):
+
+        self.log.debug('SITimeTaggerGatedCounter.__init__()')
+
         super().__init__(config=config, **kwargs)
 
         # Reference to the TT.CountBetweenMarkers measurement instance
@@ -484,6 +503,15 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
         #   1 "in_progress"
         #   2 "finished"
         self._status = -1
+
+    @staticmethod
+    def edit_test_dict(name, value):
+        SITimeTaggerGatedCounter._test_dict[name] = value
+        # self.__class__._test_dict[name] = value
+
+    @classmethod
+    def test_method(cls, value):
+        cls._test_class_var = value
 
     def on_activate(self):
         super().on_activate()
