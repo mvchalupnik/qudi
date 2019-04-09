@@ -994,6 +994,7 @@ class PredefinedGeneratorBase:
         # Keep protected reference to the SequenceGeneratorLogic
         self.__sequencegeneratorlogic = sequencegeneratorlogic
 
+    # SequenceGeneratorLogic methods ==============
     @property
     def log(self):
         return self.__sequencegeneratorlogic.log
@@ -1022,6 +1023,7 @@ class PredefinedGeneratorBase:
     def save_sequence(self):
         return self.__sequencegeneratorlogic.save_sequence
 
+    # Waveform construction parameters ============
     @property
     def generation_parameters(self):
         return self.__sequencegeneratorlogic.generation_parameters

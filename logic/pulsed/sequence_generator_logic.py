@@ -631,6 +631,8 @@ class SequenceGeneratorLogic(GenericLogic):
     ############################################################################
     # Waveform/Sequence construction (generation control) methods and properties
     ############################################################################
+
+    # ===================== Automatic Waveform Generation ======================
     @property
     def generate_methods(self):
         return self._pog.predefined_generate_methods
@@ -648,18 +650,6 @@ class SequenceGeneratorLogic(GenericLogic):
         if isinstance(settings_dict, dict):
             self.set_generation_parameters(settings_dict)
         return
-
-    @property
-    def saved_pulse_blocks(self):
-        return self._saved_pulse_blocks
-
-    @property
-    def saved_pulse_block_ensembles(self):
-        return self._saved_pulse_block_ensembles
-
-    @property
-    def saved_pulse_sequences(self):
-        return self._saved_pulse_sequences
 
     @QtCore.Slot(dict)
     def set_generation_parameters(self, settings_dict=None, **kwargs):
@@ -726,6 +716,20 @@ class SequenceGeneratorLogic(GenericLogic):
         self.sigSamplingSettingsUpdated.emit(self.generation_parameters)
         return self.generation_parameters
 
+    # =================== Saving PulseObject instances ==========================
+    @property
+    def saved_pulse_blocks(self):
+        return self._saved_pulse_blocks
+
+    @property
+    def saved_pulse_block_ensembles(self):
+        return self._saved_pulse_block_ensembles
+
+    @property
+    def saved_pulse_sequences(self):
+        return self._saved_pulse_sequences
+
+    # Save/get/load/delete block ====================
     def save_block(self, block):
         """ Saves a PulseBlock instance
 
@@ -823,6 +827,7 @@ class SequenceGeneratorLogic(GenericLogic):
             self._save_block_to_file(block)
         return
 
+    # Save/get/load/delete ensemble ==================
     def save_ensemble(self, ensemble):
         """ Saves a PulseBlockEnsemble instance
 
@@ -935,6 +940,7 @@ class SequenceGeneratorLogic(GenericLogic):
             self._save_ensemble_to_file(ensemble)
         return
 
+    # Save/get/load/delete sequence ===================
     def save_sequence(self, sequence):
         """ Saves a PulseSequence instance
 
@@ -1538,12 +1544,11 @@ class SequenceGeneratorLogic(GenericLogic):
     def _sampling_ensemble_sanity_check(self, ensemble):
         blocks_missing = set()
         channel_activation_mismatch = False
-        for block, reps in ensemble.block_list:
-        # for block_name, reps in ensemble.block_list:
-        #     block = self._saved_pulse_blocks.get(block_name)
+        for block_name, reps in ensemble.block_list:
+            block = self._saved_pulse_blocks.get(block_name)
             # Check if block is present
             if block is None:
-                blocks_missing.add(block.name)
+                blocks_missing.add(block_name)
                 continue
             # Check for matching channel activation
             if block.channel_set != self.__activation_config[1]:
