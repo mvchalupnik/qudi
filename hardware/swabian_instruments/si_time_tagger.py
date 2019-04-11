@@ -66,9 +66,6 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 
 from core.module import Base, ConfigOption
 import TimeTagger as TT
-import time
-import numpy as np
-import copy
 
 
 class SITimeTagger(Base):
