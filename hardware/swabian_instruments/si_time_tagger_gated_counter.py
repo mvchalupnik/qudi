@@ -79,7 +79,7 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
 
     # Connector to SITimeTagger hardware module
     # (which connects to the device and keeps reference to it)
-    timetagger = Connector(interface='DoesNotMatterWhenThisIsString')
+    time_tagger = Connector(interface='DoesNotMatterWhenThisIsString')
 
     # Config Options
 
@@ -98,6 +98,10 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
         self._tagger = None
         # Reference to the TT.CountBetweenMarkers measurement instance
         self._counter = None
+        # Reference to Combiner object
+        # (if _click_channel is a list - then counts on all channels are summed
+        # into virtual channel - self._combiner.getChannel())
+        self._combiner = None
 
         # Channel assignments
         self._click_channel = 0
@@ -119,7 +123,7 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
     def on_activate(self):
 
         # Pull device reference in from underlying SITimeTagger hardware module
-        self._tagger = self.timetagger().reference
+        self._tagger = self.time_tagger().reference
 
         # Log device ID information to demonstrate that connection indeed works
         serial = self._tagger.getSerial()
@@ -155,6 +159,7 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
 
         self._click_channel = 0
         self._gate_channel = 0
+        self._combiner = None
 
     # ------------------------------------------------------
 
@@ -197,15 +202,36 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
 
         return 0
 
+    def close_counter(self):
+
+        # Try to stop and to clear TT.CountBetweenMarkers measurement instance
+        try:
+            self._counter.stop()
+            self._counter.clear()
+        except:
+            pass
+
+        # Remove reference, set status to "void"
+        self._counter = None
+        self._set_status(-1)
+
+        return 0
+
     def start_counting(self):
 
-        if self.get_status() == -1:
-            self.log.error('start_counting(): counter is in "void state - it ether was not initialized '
-                           'or was closed. Initialize it by calling init_counter()"')
+        current_status = self.get_status()
+
+        # terminate counting if it is already running
+        if current_status == 1:
+            self.terminate_counting()
+
+        # Sanity check: ensure that counter is not "void"
+        if current_status == -1:
+            self.log.error('start_counting(): counter is in "void" state - it ether was not initialized '
+                           'or was closed. Initialize it by calling init_counter()')
             return -1
 
         # Try stopping and restarting counter measurement
-        # handle NotImplementedError (typical error, produced by TT functions)
         try:
             self._counter.stop()  # does not fail even if the measurement is not running
             self._counter.clear()
@@ -213,18 +239,13 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
 
             # set status to "in_progress"
             self._set_status(1)
-
             return 0
 
+        # handle exception in TT function calls [NotImplementedError]
         except NotImplementedError:
             # Since stop() and clear() methods are very robust,
-            # this part is only executed it two cases:
-            #   -- self._counter is None
-            #   -- counter is totally broken
-            #
-            # If reference is broken, it makes sense to close counter and
-            # if reference is None, close_counter() does not fail anyways
-            # That is why close_counter() is called.
+            # this part is only executed if counter is totally broken.
+            # In this case it makes sense to close counter.
             self.close_counter()
 
             self.log.error('start_counting(): call failed. Counter was closed. \n'
@@ -233,8 +254,11 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
 
     def terminate_counting(self):
 
+        # Action of this method is non-trivial for "in_progress" state only
+        if self.get_status() != 1:
+            return 0
+
         # Try stopping and clearing counter measurement
-        # handle NotImplementedError (typical error, produced by TT functions)
         try:
             # stop counter, clear count array
             self._counter.stop()
@@ -244,15 +268,11 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
             self._set_status(0)
             return 0
 
-        except:
+        # handle exception in TT.stop()/TT.clear()
+        except NotImplementedError:
             # Since stop() and clear() methods are very robust,
-            # this part is only executed it two cases:
-            #   -- self._counter is None
-            #   -- counter is totally broken
-            #
-            # If reference is broken, it makes sense to close counter and
-            # if reference is None, close_counter() does not fail anyways
-            # That is why close_counter() is called.
+            # this part is only executed if counter is totally broken.
+            # In this case it makes sense to close counter.
             self.close_counter()
 
             self.log.error('terminate_counting(): call failed. Counter was closed')
@@ -265,7 +285,7 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
         #  -- if self._counter is None or if connection is broken, call will rise some exception
         #     in this case "void" status should be set
         #  -- if counter was initialized and connection works, it will return successfully
-        #     and further choice between "idle" and "in_progress" should be made
+        #     and further choice between "idle", "in_progress", and "finished" should be made
         try:
             self._counter.isRunning()
         except:
@@ -273,12 +293,17 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
             # in addition, this cleanup is needed if connection is broken
             self.close_counter()
 
+        # No handling of "idle" and "finished" status is needed:
+        # it will be returned by self._status
+
         # Handle "in_progress" status
         #   This status means that measurement was started before.
         #   Now one needs to check if it is already finished or not.
         #   If measurement is complete, change status to "finished".
         if self._status == 1:
             if self._counter.ready():
+
+                self._counter.stop()
                 self._status = 2
 
         return copy.deepcopy(self._status)
@@ -291,10 +316,11 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
         #   "idle" if measurement is terminated,
         #   "void" if counter breaks
         start_time = time.time()
-        sleep_time = timeout/100
+        sleep_time = abs(timeout)/100
+
         while self.get_status() == 1:
             # stop waiting if timeout elapses
-            if time.time()-start_time > timeout:
+            if time.time()-start_time > timeout >= 0:
                 break
             time.sleep(sleep_time)
 
@@ -320,21 +346,6 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
                 self.log.error('get_count_array(): counter broke and was deleted')
 
             return []
-
-    def close_counter(self):
-
-        # Try to stop and to clear TT.CountBetweenMarkers measurement instance
-        try:
-            self._counter.stop()
-            self._counter.clear()
-        except:
-            pass
-
-        # Remove reference, set status to "void"
-        self._counter = None
-        self._set_status(-1)
-
-        return 0
 
     # ------------------------------------------------------
 
@@ -419,7 +430,8 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
         return {'click_channel': click_channel, 'gate_channel': gate_channel}
 
     def set_channel_assignment(self, click_channel=None, gate_channel=None):
-        """Sets click channel and and gate channel.
+        """
+        Sets click channel and and gate channel.
 
         This method only changes internal variables
         self._click_channel and self._gate_channel.
@@ -464,12 +476,12 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
 
             # If several channel numbers were passed, create virtual Combiner channel
             if len(click_channel_list) > 1:
-                combiner = TT.Combiner(
+                self._combiner = TT.Combiner(
                     tagger=self._tagger,
                     channels=click_channel_list
                 )
                 # Obtain int channel number for the virtual channel
-                click_channel_list = [combiner.getChannel()]
+                click_channel_list = [self._combiner.getChannel()]
 
             # Set new value for click channel
             self._click_channel = int(click_channel_list[0])
@@ -489,7 +501,8 @@ class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
         return self.get_channel_assignment()
 
     def get_all_channels(self):
-        """Returns list of all channels available on the device,
+        """
+        Returns list of all channels available on the device,
         including edge type sign.
 
         Positive/negative numbers correspond to detection of rising/falling edges.

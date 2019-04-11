@@ -159,9 +159,11 @@ class GatedCounterInterface(metaclass=InterfaceMetaclass):
         process is not disturbed and continues to run. One can call get_count_array()
         later or call terminate_counting() to stop accumulation.
         To remove time limit, set timeout to -1.
+        Attempt to read will be performed every abs(timeout/100) seconds.
 
 
-        :param timeout: (int) operation timeout in seconds (-1 for "infinite")
+        :param timeout: (int) operation timeout in seconds
+                        (0 for "return immediately", -1 for "infinite")
 
         :return: np.array(bin_number, dtype=np.uint32) count_array
                  Empty list [] is returned if there is no data to read, if operation
