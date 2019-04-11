@@ -64,22 +64,20 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 """
 
-from core.module import Connector, ConfigOption
-from logic.generic_logic import GenericLogic
+from core.module import Base, Connector, ConfigOption
 from interface.slow_counter_interface import SlowCounterInterface, SlowCounterConstraints, CountingMode
 import TimeTagger as TT
 import time
-import numpy as np
 import copy
 
 
-class SITimeTaggerSlowCounter(GenericLogic, SlowCounterInterface):
+class SITimeTaggerSlowCounter(Base, SlowCounterInterface):
 
     _modclass = 'SITimeTaggerSlowCounter'
-    _modtype = 'logic'
+    _modtype = 'hardware'
 
     # Connector to SITimeTagger hardware module
-    timetagger = Connector(interface='ConfocalScannerInterface')
+    timetagger = Connector(interface='DoesNotMatterWhenThisIsString')
 
     # Configuration options
     _cfg_channel_list = ConfigOption(name='click_channel_list', missing='error')

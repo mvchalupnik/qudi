@@ -64,8 +64,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 """
 
-from core.module import Base, ConfigOption
-from interface.slow_counter_interface import SlowCounterInterface, SlowCounterConstraints, CountingMode
+from core.module import Base, ConfigOption, Connector
 from interface.gated_counter_interface import GatedCounterInterface
 import TimeTagger as TT
 import time
@@ -73,399 +72,16 @@ import numpy as np
 import copy
 
 
-class SITimeTaggerBase(Base):
-
-    # Set the following channel numbering scheme:
-    #   rising edge channels: 1, ..., 8
-    #   falling edges channels: -1, ..., -8
-    #   For details see Time Tagger documentation: "Channel Number Schema 0 and 1"
-    TT.setTimeTaggerChannelNumberScheme(TT.TT_CHANNEL_NUMBER_SCHEME_ONE)
-
-    # Class-wide dictionary, containing references to all SI TimeTagger devices, used by any of the modules
-    #   keys are serial number strings, values - references to device objects
-    _device_ref_dict = dict()
-
-    # Config Options
-    # Serial number of the device
-    _cfg_serial_str = ConfigOption(name='serial_number_string', missing='error')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.log.debug('SITimeTaggerBase.__init__()')
-
-        # Internal variables
-        self._serial_str = ''  # serial number of the device, to which this module is connected
-
-    def on_activate(self):
-        # Populate serial number string attribute
-        self._serial_str = self._cfg_serial_str
-
-        self.log.debug('on_activate(): self._tagger = {}'.format(self._tagger))
-        self.log.debug('on_activate(): SITimeTaggerBase._device_ref_dict = {}'.format(SITimeTaggerBase._device_ref_dict))
-
-        # Connect to the device with serial number self._serial_str
-        op_status = self.connect_to_device()
-        if op_status < 0:
-            self.log.error('on_activate(): connection to device with serial "{0}" failed'
-                           ''.format(self._serial_str))
-            return
-
-        # Log device ID information to demonstrate that connection indeed works
-        serial = self._tagger.getSerial()
-        model = self._tagger.getModel()
-        self.log.info('Successfully connected to Swabian Instruments TimeTagger device \n'
-                      'Serial number: {0}, Model: {1}'
-                      ''.format(serial, model))
-
-    def on_deactivate(self):
-        self._serial_str = ''
-
-    @property
-    def _tagger(self):
-        """
-        This property implements read-only access to the class-wide __device_ref_dict
-        (more specifically, only to the reference of the device, to which this module is connected).
-
-        To understand which device is the module connected to, the property accesses self._serial_str attribute.
-
-        Device reference is returned if self._serial_str is on the dictionary key list. Otherwise None is returned.
-        """
-
-        serial_str = self._serial_str
-        if serial_str in SITimeTaggerBase._device_ref_dict.keys():
-            return SITimeTaggerBase._device_ref_dict[serial_str]
-        else:
-            return None
-
-    # @classmethod
-    @staticmethod
-    def add_device(serial_str):
-        """
-        Connect to device with serial number serial_str.
-
-        :param serial_str: serial number of the device
-
-        :return: (int) operation_status: 0 - OK
-                                        -1 - Error
-        """
-
-        tagger = TT.createTimeTagger(serial_str)
-
-        if tagger is None:
-            # TODO: add actual error check. Test in Jupyter notebook showed that the above function call
-            # TODO: just freezes if invalid serial number string is passed
-            return -1
-        else:
-            # Add the reference to the class-wide dictionary
-            SITimeTaggerBase._device_ref_dict[serial_str] = tagger
-            # Reset device
-            tagger.reset()
-
-            return 0
-
-    @staticmethod
-    def test_add_something_to_class_dict(name, value):
-        SITimeTaggerBase._device_ref_dict[name] = value
-
-    def connect_to_device(self):
-        """
-        Connect to tagger is necessary.
-
-        This method determines if __device_ref_dict contains a reference
-        to the device with serial number self._serial_str. If not,
-        class method cls.add_device() is called to connect to the new device.
-
-        Always call this method in the very beginning of on_activate()
-
-
-        :return: (int) operation status: 0 - OK
-                                        -1 - Error
-        """
-
-        # Check if the device is already present in the class-wide dictionary by calling self._tagger property
-        # If not, call cls.add_device()
-        if self._tagger is None:
-            op_status = self.add_device(serial_str=self._serial_str)
-
-            # Handle possible errors
-            if op_status < 0:
-                self.log.error('connect_to_device(): failed to connect to the device [self._serial_str={0}]'
-                               ''.format(self._serial_str))
-                return -1
-
-        return 0
-
-
-class SITimeTaggerSlowCounter(SITimeTaggerBase, SlowCounterInterface):
-
-    _modclass = 'SITimeTaggerSlowCounter'
-    _modtype = 'hardware'
-
-    _cfg_channel_list = ConfigOption(name='click_channel_list', missing='error')
-    _cfg_clock_frequency = ConfigOption('clock_frequency', 200, missing='info')
-    _cfg_buffer_size = ConfigOption('buffer_size', 100, missing='info')
-
-    def __init__(self, config, **kwargs):
-        super().__init__(config=config, **kwargs)
-
-        self._counter = None
-
-        self._bin_width = 0
-        self._bin_width_sec = 0
-        self._channel_list = []
-        self._buffer_size = 0
-
-        self._timeout = 10
-
-        self._last_read_bin = 0
-        self._overflow = 0
-
-    def on_activate(self):
-
-        super().on_activate()
-
-        # Counter channels
-        # sanity check:
-        if not set(self._cfg_channel_list).issubset(set(self._get_all_channels())):
-            self.log.error('')
-            return
-        self._channel_list = self._cfg_channel_list
-
-    def on_deactivate(self):
-        super().on_deactivate()
-        self.close_clock()
-        self.close_counter()
-
-    def set_up_clock(self, clock_frequency=None, clock_channel=None):
-        """ Sets sample clock frequency for the Counter measurement.
-
-        @param float clock_frequency: if defined, this sets the frequency of the clock
-        @param string clock_channel: ignored (internal timebase is used to generate sample clock signal)
-
-        @return int: error code (0:OK, -1:error)
-        """
-
-        # Bin_width
-        if clock_frequency is None:
-            clock_frequency = self._cfg_clock_frequency
-        # sanity check
-        constraints = self.get_constraints()
-        if clock_frequency < constraints.min_count_frequency:
-            self.log.error('set_up_clock(): too low count frequency: {0} Hz. \n '
-                           'Hardware-defined minimum: {1} Hz'
-                           ''.format(clock_frequency, constraints.min_count_frequency))
-            return -1
-        elif clock_frequency > constraints.max_count_frequency:
-            self.log.error('set_up_clock(): too high count frequency: {0} Hz. \n '
-                           'Hardware-defined maximum: {1} Hz'
-                           ''.format(clock_frequency, constraints.max_count_frequency))
-            return -1
-        bin_width = int(1e12/clock_frequency)
-
-        # Store new param values into main param dictionary
-        self._bin_width = bin_width
-        self._bin_width_sec = bin_width * 1e-12
-
-        return 0
-
-    def set_up_counter(self,
-                       counter_channels=None,
-                       sources=None,
-                       clock_channel=None,
-                       counter_buffer=None):
-        """ Configures the actual counter with a given clock.
-
-        @param list(str) counter_channels: optional, physical channel of the counter
-
-        @param int counter_buffer: optional, a buffer of specified integer
-                                   length, where in each bin the count numbers
-                                   are saved.
-
-        Ignored arguments:
-        @param list(str) sources:
-        @param str clock_channel:
-
-        @return int: error code (0:OK, -1:error)
-
-        There need to be exactly the same number sof sources and counter channels and
-        they need to be given in the same order.
-        All counter channels share the same clock.
-        """
-
-        # Handle parameters
-        # Counter channels
-        if counter_channels is not None:
-            channel_list = counter_channels
-        else:
-            channel_list = self._cfg_channel_list
-        # sanity check:
-        if not set(channel_list).issubset(set(self._get_all_channels())):
-            self.log.error('')
-            return -1
-
-        # Buffer size
-        if counter_buffer is not None:
-            buffer_size = counter_buffer
-        else:
-            buffer_size = self._cfg_buffer_size
-        # sanity check:
-        if buffer_size <= 0:
-            self.log.error('')
-            return -1
-
-        # Create instance of Counter measurement
-        counter_ref = TT.Counter(
-            tagger=self._tagger,
-            channels=channel_list,
-            binwidth=self._bin_width,
-            n_values=buffer_size
-        )
-        if counter_ref is None:
-            self.log.error('')
-            return -1
-
-        # Save reference and parameters
-        self._counter = counter_ref
-        self._channel_list = channel_list
-        self._buffer_size = buffer_size
-
-        # Start Counter, set current time mark to 0
-        self._counter.start()
-        self._last_read_bin = 0
-        self._counter.clear()
-
-        return 0
-
-    def close_clock(self):
-        """ Closes the clock and cleans up afterwards.
-
-        @return int: error code (0:OK, -1:error)
-        """
-        if self._counter is not None:
-            self._counter.stop()
-            self._counter.clear()
-
-        self._bin_width = 0
-        self._bin_width_sec = 0
-        self._last_read_bin = 0
-
-        return 0
-
-    def close_counter(self):
-        """ Closes the counter and cleans up afterwards.
-
-        @return int: error code (0:OK, -1:error)
-        """
-        if self._counter is not None:
-            self._counter.stop()
-            self._counter.clear()
-
-        self._channel_list = []
-        self._buffer_size = []
-        self._last_read_bin = 0
-        self._counter = None
-
-        return 0
-
-    def get_counter(self, samples=1):
-        """ Returns the current counts per second of the counter.
-
-        @param int samples: if defined, number of samples to read in one go
-
-        @return numpy.array((n, uint32)): the photon counts per second for n channels
-        """
-
-        # Sanity checks
-        if samples != 1:
-            if not isinstance(samples, int) or samples <= 0:
-                self.log.error('get_counter(): invalid argument samples={0}. This argument must be a positive integer'
-                               ''.format(samples))
-                return np.zeros(
-                    shape=(
-                        len(self._channel_list),
-                        samples
-                    ),
-                    dtype=np.uint32
-                )
-
-        if self._counter is None:
-            self.log.error('get_counter(): Counter is not running')
-            return np.zeros(
-                shape=(
-                    len(self._channel_list),
-                    samples
-                ),
-                dtype=np.uint32
-            )
-
-        # start_time = time.time()
-        # while time.time() - start_time < self._timeout:
-        #     new_complete_bins = self._counter.getCaptureDuration() // self._bin_width - self._last_read_bin
-        #
-        #     self._overflow = new_complete_bins
-        #     # self.log.error('new_complete_bins = {}'.format(new_complete_bins))
-        #
-        #     if new_complete_bins < samples:
-        #         time.sleep(self._bin_width_sec/2)
-        #         continue
-        #     elif new_complete_bins == samples:
-        #         self._last_read_bin += new_complete_bins
-        #         break
-        #     else:
-        #         # self.log.warn('Counter is overflowing. \n'
-        #         #               'Software pulls data in too slowly and counter bins are too short, '
-        #         #               'such that some bins are lost. \n'
-        #         #               'Try reducing sampling rate or increasing oversampling')
-        #         self._last_read_bin += new_complete_bins
-        #         break
-
-        time.sleep(samples * self._bin_width_sec)
-
-        return self._counter.getData()[:, -samples:] / self._bin_width_sec
-
-    def get_constraints(self):
-        """ Retrieve the hardware constrains from the counter device.
-
-        @return SlowCounterConstraints: object with constraints for the counter
-        """
-        constraints = SlowCounterConstraints()
-        # TODO: check values
-        constraints.min_count_frequency = 1
-        constraints.max_count_frequency = 10e9
-        constraints.max_detectors = 8
-        constraints.counting_mode = [CountingMode.CONTINUOUS]
-
-        return constraints
-
-    def get_counter_channels(self):
-        """ Returns the list of counter channel names.
-
-        @return list(str): channel names
-
-        Most methods calling this might just care about the number of channels, though.
-        """
-
-        return copy.deepcopy(self._channel_list)
-
-    def _get_all_channels(self):
-
-        return list(
-            self._tagger.getChannelList(
-                TT.TT_CHANNEL_RISING_AND_FALLING_EDGES
-            )
-        )
-
-
-class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
+class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
 
     _modclass = 'SITimeTaggerGatedCounter'
     _modtype = 'hardware'
 
-    # Config Options
+    # Connector to SITimeTagger hardware module
+    # (which connects to the device and keeps reference to it)
+    timetagger = Connector(interface='DoesNotMatterWhenThisIsString')
 
-    # Serial number string
-    # [defined in SITimeTaggerBase]
+    # Config Options
 
     # Click channel
     # [list can be passed - clicks on all specified channels will be summed into one logical channel]
@@ -475,15 +91,11 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
     # [positive/negative channel number - count while gate is high/low]
     _cfg_gate_channel = ConfigOption(name='gate_channel', missing='error')
 
-    _test_dict = {}
-    _test_class_var = 0
-
     def __init__(self, config, **kwargs):
-
-        self.log.debug('SITimeTaggerGatedCounter.__init__()')
-
         super().__init__(config=config, **kwargs)
 
+        # Reference to tagger
+        self._tagger = None
         # Reference to the TT.CountBetweenMarkers measurement instance
         self._counter = None
 
@@ -504,21 +116,17 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
         #   2 "finished"
         self._status = -1
 
-    @staticmethod
-    def edit_test_dict(name, value):
-        SITimeTaggerGatedCounter._test_dict[name] = value
-        # self.__class__._test_dict[name] = value
-
-    @staticmethod
-    def return_test_dict():
-        return SITimeTaggerGatedCounter._test_dict
-
-    @classmethod
-    def test_method(cls, value):
-        cls._test_class_var = value
-
     def on_activate(self):
-        super().on_activate()
+
+        # Pull device reference in from underlying SITimeTagger hardware module
+        self._tagger = self.timetagger().reference
+
+        # Log device ID information to demonstrate that connection indeed works
+        serial = self._tagger.getSerial()
+        model = self._tagger.getModel()
+        self.log.info('Got reference to Swabian Instruments TimeTagger device \n'
+                      'Serial number: {0}, Model: {1}'
+                      ''.format(serial, model))
 
         # Reset internal variables
         self._counter = None  # reference to the TT.CountBetweenMarkers measurement instance
@@ -535,7 +143,9 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
         # the counter is ready to be initialized by the above-lying logic though init_counter() call
 
     def on_deactivate(self):
-        super().on_deactivate()
+
+        # # Clear reference to the device
+        # self._tagger = None
 
         # Close TT.CountBetweenMarkers instance
         self.close_counter()
@@ -554,7 +164,6 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
         self.close_counter()
 
         # Instantiate counter measurement
-        # handle NotImplementedError (typical error, produced by TT functions)
         try:
             self._counter = TT.CountBetweenMarkers(
                 tagger=self._tagger,
@@ -566,6 +175,10 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
             # set status to "idle"
             self._set_status(0)
 
+            # save bin_number in internal variable
+            self._bin_number = bin_number
+
+        # handle NotImplementedError (typical error, produced by TT functions)
         except NotImplementedError:
             self.log.error('init_counter(): instantiation of CountBetweenMarkers measurement failed')
 
@@ -575,9 +188,6 @@ class SITimeTaggerGatedCounter(SITimeTaggerBase, GatedCounterInterface):
             self._set_status(-1)
 
             return -1
-
-        # save bin_number in internal variable
-        self._bin_number = bin_number
 
         # Prepare counter to be started by start_counting()
         # (CountBetweenMarkers measurement starts running immediately after instantiation,
