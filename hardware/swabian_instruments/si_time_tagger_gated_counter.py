@@ -73,6 +73,24 @@ import copy
 
 
 class SITimeTaggerGatedCounter(Base, GatedCounterInterface):
+    """
+
+    Copy-Paste config:
+
+    time_tagger:
+        module.Class: 'swabian_instruments.si_time_tagger.SITimeTagger'
+        # serial_number_string: '1634000FX0'
+
+    gated_counter:
+        module.Class: 'swabian_instruments.si_time_tagger_gated_counter.SITimeTaggerGatedCounter'
+        click_channel:
+            - 1
+            - 2
+        gate_channel: 3
+        connect:
+            time_tagger: 'time_tagger'
+
+    """
 
     _modclass = 'SITimeTaggerGatedCounter'
     _modtype = 'hardware'

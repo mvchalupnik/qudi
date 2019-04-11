@@ -72,6 +72,26 @@ import copy
 
 
 class SITimeTaggerSlowCounter(Base, SlowCounterInterface):
+    """
+
+    Copy-Paste config
+
+    time_tagger:
+        module.Class: 'swabian_instruments.si_time_tagger.SITimeTagger'
+        # serial_number_string: '1634000FX0'
+
+    slow_counter:
+        module.Class: 'swabian_instruments.si_time_tagger_slow_counter.SITimeTaggerSlowCounter'
+        click_channel_list:
+            - 1
+            - 2
+            - 3
+        clock_frequency: 100
+        buffer_size: 50
+        connect:
+            timetagger: 'time_tagger'
+
+    """
 
     _modclass = 'SITimeTaggerSlowCounter'
     _modtype = 'hardware'
