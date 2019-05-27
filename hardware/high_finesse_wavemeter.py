@@ -37,7 +37,7 @@ class HardwarePull(QtCore.QObject):
     """ Helper class for running the hardware communication in a separate thread. """
 
     # signal to deliver the wavelength to the parent class
-    sig_wavelength = QtCore.Signal(float, float)
+    sig_wavelength = QtCore.Signal(float)
 
     def __init__(self, parentclass):
         super().__init__()
@@ -67,11 +67,10 @@ class HardwarePull(QtCore.QObject):
         # update as long as the state is busy
         if self._parentclass.module_state() == 'running':
             # get the current wavelength from the wavemeter
-            temp1=float(self._parentclass._wavemeterdll.GetWavelength(0))
-            temp2=float(self._parentclass._wavemeterdll.GetWavelength(0))
+            temp = float(self._parentclass._wavemeterdll.GetWavelengthNum(3, 0))
 
             # send the data to the parent via a signal
-            self.sig_wavelength.emit(temp1, temp2)
+            self.sig_wavelength.emit(temp)
 
 
 
@@ -100,9 +99,9 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
     #############################################
 
     # define constants as flags for the wavemeter
-    _cCtrlStop                   = ctypes.c_uint16(0x00)
+    _cCtrlStop                   = ctypes.c_uint16(0x0000)
     # this following flag is modified to override every existing file
-    _cCtrlStartMeasurment        = ctypes.c_uint16(0x1002)
+    _cCtrlStartMeasurment        = ctypes.c_uint16(0x0002)
     _cReturnWavelangthAir        = ctypes.c_long(0x0001)
     _cReturnWavelangthVac        = ctypes.c_long(0x0000)
 
@@ -115,7 +114,6 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
 
         # the current wavelength read by the wavemeter in nm (vac)
         self._current_wavelength = 0.0
-        self._current_wavelength2 = 0.0
 
 
     def on_activate(self):
@@ -134,16 +132,9 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
         # define the use of the GetWavelength function of the wavemeter
 #        self._GetWavelength2 = self._wavemeterdll.GetWavelength2
         # return data type of the GetWavelength function of the wavemeter
-        self._wavemeterdll.GetWavelength2.restype = ctypes.c_double
+        self._wavemeterdll.GetWavelengthNum.restype = ctypes.c_double
         # parameter data type of the GetWavelength function of the wavemeter
-        self._wavemeterdll.GetWavelength2.argtypes = [ctypes.c_double]
-
-        # define the use of the GetWavelength function of the wavemeter
-#        self._GetWavelength = self._wavemeterdll.GetWavelength
-        # return data type of the GetWavelength function of the wavemeter
-        self._wavemeterdll.GetWavelength.restype = ctypes.c_double
-        # parameter data type of the GetWavelength function of the wavemeter
-        self._wavemeterdll.GetWavelength.argtypes = [ctypes.c_double]
+        self._wavemeterdll.GetWavelengthNum.argtypes = [ctypes.c_long, ctypes.c_double]
 
         # define the use of the ConvertUnit function of the wavemeter
 #        self._ConvertUnit = self._wavemeterdll.ConvertUnit
@@ -194,11 +185,10 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
     # Methods of the main class
     #############################################
 
-    def handle_wavelength(self, wavelength1, wavelength2):
+    def handle_wavelength(self, wavelength):
         """ Function to save the wavelength, when it comes in with a signal.
         """
-        self._current_wavelength = wavelength1
-        self._current_wavelength2 = wavelength2
+        self._current_wavelength = wavelength
 
     def start_acqusition(self):
         """ Method to start the wavemeter software.
@@ -211,7 +201,7 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
         # first check its status
         if self.module_state() == 'running':
             self.log.error('Wavemeter busy')
-            return -1
+            return -2
 
 
         self.module_state.run()
@@ -256,21 +246,6 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
         if kind in "vac":
             # for vacuum just return the current wavelength
             return float(self._current_wavelength)
-        return -2.0
-
-    def get_current_wavelength2(self, kind="air"):
-        """ This method returns the current wavelength of the second input channel.
-
-        @param string kind: can either be "air" or "vac" for the wavelength in air or vacuum, respectively.
-
-        @return float: wavelength (or negative value for errors)
-        """
-        if kind in "air":
-            # for air we need the convert the current wavelength. The Wavemeter DLL already gives us a nice tool do do so.
-            return float(self._wavemeterdll.ConvertUnit(self._current_wavelength2,self._cReturnWavelangthVac,self._cReturnWavelangthAir))
-        if kind in "vac":
-            # for vacuum just return the current wavelength
-            return float(self._current_wavelength2)
         return -2.0
 
     def get_timing(self):

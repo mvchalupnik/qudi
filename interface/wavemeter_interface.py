@@ -62,17 +62,6 @@ class WavemeterInterface(metaclass=InterfaceMetaclass):
         pass
 
     @abc.abstractmethod
-    def get_current_wavelength2(self, kind="air"):
-        """ This method returns the current wavelength of the second input channel.
-
-        @param str kind: can either be "air" or "vac" for the wavelength in air
-                         or vacuum, respectively.
-
-        @return float: wavelength (or negative value for errors)
-        """
-        pass
-
-    @abc.abstractmethod
     def get_timing(self):
         """ Get the timing of the internal measurement thread.
 
