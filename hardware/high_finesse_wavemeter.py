@@ -233,7 +233,7 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
 
         return 0
 
-    def get_current_wavelength(self, kind="air"):
+    def get_current_wavelength(self, kind="vac"):
         """ This method returns the current wavelength.
 
         @param string kind: can either be "air" or "vac" for the wavelength in air or vacuum, respectively.
