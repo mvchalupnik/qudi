@@ -99,9 +99,9 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
     #############################################
 
     # define constants as flags for the wavemeter
-    _cCtrlStop                   = ctypes.c_uint16(0x0000)
+    _cCtrlStop                   = ctypes.c_uint16(0x00)
     # this following flag is modified to override every existing file
-    _cCtrlStartMeasurment        = ctypes.c_uint16(0x0002)
+    _cCtrlStartMeasurment        = ctypes.c_uint16(0x1002)
     _cReturnWavelangthAir        = ctypes.c_long(0x0001)
     _cReturnWavelangthVac        = ctypes.c_long(0x0000)
 
