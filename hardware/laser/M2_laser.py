@@ -57,7 +57,7 @@ class M2Laser:
         self.socket = socket.create_connection(self.address, timeout=self.timeout)
         interface = self.socket.getsockname()[0]
         _, reply = self.send('start_link', {'ip_address': interface})
-        if reply['status'] == 'ok':
+        if reply[-1]['status'] == 'ok':
             return True
         else:
             return False
@@ -68,20 +68,13 @@ class M2Laser:
         self.socket.close()
         self.socket = None
 
-    def is_connected(self):
-        """ Checks the laser connection
-
-        :return bool: Whether or not the laser is connected
-        """
-        return self.socket.is_connected()
-
     def set_timeout(self, timeout):
         """ Sets the timeout in seconds for connecting or sending/receiving
 
         :param timeout: timeout in seconds
         """
         self.timeout = timeout
-        self.socket.set_timeout(timeout)
+        self.socket.settimeout(timeout)
 
     def send(self, op, parameters, transmission_id=None):
         """ Send json message to laser
@@ -96,7 +89,7 @@ class M2Laser:
         reply = self.socket.recv(1024)
         #self.log(reply)
         op_reply, parameters_reply = self._parse_reply(reply)
-        self._last_status[self._parse_report_op(op_reply)] = parameters_reply
+        self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1]
         return op_reply, parameters_reply
 
     def set(self, setting, value, key_name='setting'):
@@ -124,15 +117,17 @@ class M2Laser:
         :return bool: get success
         """
         _, reply = self.send(setting, {})
-        if reply['status'] == 'ok':
+        if reply[-1]['status'] == 'ok':
             return reply
         else:
             return None
 
-    def flush(self):
+    def flush(self, bits=1024):
         """ Flush read buffer
         """
-        self.socket.recv_all()
+
+        self.set_timeout(5)
+        return self.socket.recv(bits)
 
     def connect_wavemeter(self, sync=True):
         """ Connect to the wavemeter via websocket, if sync==True wait until the connection is established
@@ -184,56 +179,80 @@ class M2Laser:
         :return dict: laser state message
         """
         _, reply = self.send('get_status', {})
-        return reply
+        return reply[-1]
 
     def get_full_tuning_status(self):
+        """ Gets the current wavelength, lock_status, and extended zone of the laser
+
+        :return dict: laser tuning status
+        """
+
         _, reply = self.send('poll_wave_m', {})
-        return reply
+        return reply[-1]
 
     def lock_wavemeter(self, lock=True, sync=True):
+        """Causes SolsTiS to monitor the wavelength and automatically readjust the tuning to the currently set target
+        wavelength.
+
+        :param lock bool: Lock the etalon
+        :param sync bool: Wait for the etalon to lock
+        :return bool: Wavemeter locked
+        """
+
         _, reply = self.send('lock_wave_m', {'operation': 'on' if lock else 'off'})
         if sync:
             while self.is_wavemeter_lock_on() != lock:
                 time.sleep(0.05)
-        return reply
+        return self.is_wavemeter_lock_on()
 
     def is_wavemeter_lock_on(self):
-        """Check if the laser is locked to the wavemeter"""
+        """Check if the laser is locked to the wavemeter
+
+        :return bool: Wavemeter locked
+        """
         return bool(self.get_full_tuning_status()["lock_status"][0])
 
     def tune_wavelength(self, wavelength, sync=True, timeout=None):
         """
-        Fine-tune the wavelength.
+        Fine-tune the wavelength. Only works if the wavemeter is connected.
 
-        Only works if the wavemeter is connected.
-        If ``sync==True``, wait until the operation is complete (might take from several seconds up to several minutes).
+        :param wavelength float: Wavelength (nm) to be tuned to
+        :param sync bool: Wait for the etalon to lock
+        :param timeout: timeout in seconds
+        :return dict: Tuning report
         """
-        _, reply = self.send("set_wave_m", {"wavelength": [wavelength * 1E9], "report": "finished"})
-        if reply["status"][0] == 1:
+        _, reply = self.send("set_wave_m", {"wavelength": [wavelength], "report": "finished"})
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't tune wavelength: no wavemeter link")
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't tune wavelength: {}nm is out of range".format(wavelength * 1E9))
         if sync:
-            return self.wait_for_report(timeout=timeout)
+            return self.wait_for_report('set_wav_m', timeout=timeout)
 
     def check_tuning_report(self):
-        """
+        """ TODO: Fix this
         Check wavelength fine-tuning report
         Return ``"success"`` or ``"fail"`` if the operation is complete, or ``None`` if it is still in progress.
         """
         return self.check_report("set_wave_m_r")
 
     def wait_for_tuning(self, timeout=None):
-        """Wait until wavelength fine-tuning is complete"""
+        """Wait until wavelength fine-tuning is complete
+
+        :return dict: Tuning report
+        """
         self.wait_for_report("set_wave_m", timeout=timeout)
 
     def get_tuning_status(self):
-        """
-        Get fine-tuning status.
-        Return either ``"idle"`` (no tuning or locking), ``"nolink"`` (no wavemeter link),
-        ``"tuning"`` (tuning in progress), or ``"locked"`` (tuned and locked to the wavemeter).
+        """ Get fine-tuning status.
+
+        :reutn string: Tuning status
+            'idle': no tuning or locking
+            'nolink': no wavemeter link
+            'tuning': tuning in progress
+            'locked: tuned and locked to the wavemeter
         """
         status = self.get_full_tuning_status()["status"][0]
         return ["idle", "nolink", "tuning", "locked"][status]
@@ -244,40 +263,42 @@ class M2Laser:
 
         Only works if the wavemeter is connected.
         """
-        return self.get_full_tuning_status()["current_wavelength"][0] * 1E-9
+        return self.get_full_tuning_status()["current_wavelength"][0]
 
     def stop_tuning(self):
         """Stop fine wavelength tuning."""
         _, reply = self.send("stop_wave_m", {})
-        if reply["status"][0] == 1:
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't stop tuning: no wavemeter link")
 
     def tune_wavelength_table(self, wavelength, sync=True):
-        """
-        Coarse-tune the wavelength.
+        """Coarse-tune the wavelength. Only works if the wavemeter is disconnected.
 
-        Only works if the wavemeter is disconnected.
-        If ``sync==True``, wait until the operation is complete.
+        :param wavelength double: Wavelength (nm) to be tuned to
+        :param sync bool: Wait for the etalon to lock
         """
-        _, reply = self.send("move_wave_t", {"wavelength": [wavelength * 1E9], "report": "finished"})
-        if reply["status"][0] == 1:
+        _, reply = self.send("move_wave_t", {"wavelength": [wavelength], "report": "finished"})
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't tune etalon: command failed")
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't tune wavelength: {}nm is out of range".format(wavelength * 1E9))
         if sync:
             self.wait_for_report("move_wave_t")
 
     def get_full_tuning_status_table(self):
-        """Get full coarse-tuning status (see M2 ICE manual for ``"poll_move_wave_t"`` command)"""
+        """Get full coarse-tuning status (see M2 ICE manual for 'poll_move_wave_t' command)"""
         return self.send("poll_move_wave_t", {})[1]
 
     def get_tuning_status_table(self):
-        """
-        Get coarse-tuning status.
-        Return either ``"done"`` (tuning is done), ``"tuning"`` (tuning in progress), or ``"fail"`` (tuning failed).
+        """Get coarse-tuning status.
+
+        :return string:
+            'done': tuning is done
+            'tuning': tuning in progress
+            'fail': tuning failed
         """
         status = self.get_full_tuning_status_table()["status"][0]
         return ["done", "tuning", "fail"][status]
@@ -288,48 +309,52 @@ class M2Laser:
 
         Only works if the wavemeter is disconnected.
         """
-        return self.get_full_tuning_status_table()["current_wavelength"][0] * 1E-9
+        return self.get_full_tuning_status_table()["current_wavelength"][0]
 
     def stop_tuning_table(self):
         """Stop coarse wavelength tuning."""
-        self.query("stop_move_wave_t", {})
+        self.send('stop_move_wave_t', {})
 
     def tune_etalon(self, percent, sync=True):
-        """
-        Tune the etalon to `perc` percent.
+        """Tune the etalon to percent. Only works if the wavemeter is disconnected.
 
-        Only works if the wavemeter is disconnected.
-        If ``sync==True``, wait until the operation is complete.
+        :param percent float: Percent to tune etalon to
+        :param sync bool: Wait for the etalon to tune
         """
         _, reply = self.send("tune_etalon", {"setting": [percent], "report": "finished"})
-        if reply["status"][0] == 1:
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't tune etalon: {} is out of range".format(percent))
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't tune etalon: command failed")
         if sync:
-            self.wait_for_report("tune_etalon")
+            return self.wait_for_report("tune_etalon")
 
     def tune_laser_resonator(self, percent, fine=False, sync=True):
-        """
-        Tune the laser cavity to `percent` percent.
+        """Tune the laser cavity to percent. Only works if the wavemeter is disconnected.
 
-        If ``fine==True``, adjust fine tuning; otherwise, adjust coarse tuning.
-        Only works if the wavemeter is disconnected.
-        If ``sync==True``, wait until the operation is complete.
+    :param fine bool: Fine tuning
+            True: adjust fine tuning
+            False: adjust coarse tuning.
+    :param sync bool: Wait for the laser cavity to tune
         """
         _, reply = self.send("fine_tune_resonator" if fine else "tune_resonator", {"setting": [percent], "report": "finished"})
-        if reply["status"][0] == 1:
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't tune resonator: {} is out of range".format(perc))
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't tune resonator: command failed")
         if sync:
             self.wait_for_report("fine_tune_resonator")
 
     def _check_terascan_type(self, scan_type):
+        """Checks that the terascan type is valid.
+
+        :param scan_type string: Terascan type
+        """
+
         if scan_type not in {"coarse", "medium", "fine", "line"}:
             pass
             #self.log.warning("unknown terascan type: {}".format(scan_type))
@@ -341,6 +366,12 @@ class M2Laser:
                        10E9, 15E9, 20E9, 50E9, 100E9]
 
     def _trunc_terascan_rate(self, rate):
+        """Chooses the closest terascan rate
+
+        :param rate: Input terascan rate
+        :return: Closest terascan rate
+        """
+
         for tr in self._terascan_rates[::-1]:
             if rate >= tr:
                 return tr
@@ -349,12 +380,16 @@ class M2Laser:
     def setup_terascan(self, scan_type, scan_range, rate, trunc_rate=True):
         """
         Setup terascan.
-        Args:
-            scan_type(str): scan type. Can be ``"medium"`` (BRF+etalon, rate from 100 GHz/s to 1 GHz/s),
-                ``"fine"`` (all elements, rate from 20 GHz/s to 1 MHz/s), or ``"line"`` (all elements, rate from 20 GHz/s to 50 kHz/s).
-            scan_range(tuple): tuple ``(start,stop)`` with the scan range (in Hz).
-            rate(float): scan rate (in Hz/s).
-            trunc_rate(bool): if ``True``, truncate the scan rate to the nearest available rate (otherwise, incorrect rate would raise an error).
+
+        :param scan_type str: scan type
+            'medium': BRF+etalon, rate from 100 GHz/s to 1 GHz/s
+            'fine': All elements, rate from 20 GHz/s to 1 MHz/s
+            'line': All elements, rate from 20 GHz/s to 50 kHz/s).
+        :param scan_range tuple: (start,stop) in nm
+        :param rate float: scan rate in Hz/s
+        :param trunc_rate bool: Truncate rate
+            True: Truncate the scan rate to the nearest available rate
+            False: Incorrect rate would raise an error.
         """
         self._check_terascan_type(scan_type)
         if trunc_rate:
@@ -365,38 +400,40 @@ class M2Laser:
             fact, units = 1E6, "MHz/s"
         else:
             fact, units = 1E3, "kHz/s"
-        params = {"scan": scan_type, "start": [c / scan_range[0] * 1E9], "stop": [c / scan_range[1] * 1E9],
+        parameters = {"scan": scan_type, "start": [scan_range[0]], "stop": [scan_range[1]],
                   "rate": [rate / fact], "units": units}
-        _, reply = self.query("scan_stitch_initialise", params)
-        if reply["status"][0] == 1:
+        _, reply = self.send('scan_stitch_initialise', parameters)
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't setup TeraScan: start ({:.3f} THz) is out of range".format(scan_range[0] / 1E12))
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't setup TeraScan: stop ({:.3f} THz) is out of range".format(scan_range[1] / 1E12))
-        elif reply["status"][0] == 3:
+        elif reply[-1]["status"][0] == 3:
             pass
             #self.log.warning("can't setup TeraScan: scan out of range")
-        elif reply["status"][0] == 4:
+        elif reply[-1]["status"][0] == 4:
             pass
             #self.log.warning("can't setup TeraScan: TeraScan not available")
+        return reply[-1]
 
-    def start_terascan(self, scan_type, sync=False, sync_done=False):
-        """
-        Start terascan.
-        Scan type can be ``"medium"`` (BRF+etalon, rate from 100 GHz/s to 1 GHz/s), ``"fine"`` (all elements, rate from 20 GHz/s to 1 MHz/s),
-        or ``"line"`` (all elements, rate from 20 GHz/s to 50 kHz/s).
-        If ``sync==True``, wait until the scan is set up (not until the whole scan is complete).
-        If ``sync_done==True``, wait until the whole scan is complete.
+    def start_terascan(self, scan_type, sync=True, sync_done=True):
+        """Start terascan.
+        :param scan type string: Scan type
+            'medium': BRF+etalon, rate from 100 GHz/s to 1 GHz/s
+            'fine': All elements, rate from 20 GHz/s to 1 MHz/s
+            'line': All elements, rate from 20 GHz/s to 50 kHz/s
+        :param sync bool: Wait until the scan is set up (not until the whole scan is complete)
+        :param sync_done bool: wait until the whole scan is complete.
         """
         self._check_terascan_type(scan_type)
         if sync:
             self.enable_terascan_updates()
-        _, reply = self.query("scan_stitch_op", {"scan": scan_type, "operation": "start"}, report=True)
-        if reply["status"][0] == 1:
+        _, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "start", "report": "finished"})
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning(("can't start TeraScan: operation failed")
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't start TeraScan: TeraScan not available")
         if sync:
@@ -405,29 +442,32 @@ class M2Laser:
             self.wait_for_report("scan_stitch_op")
 
     def enable_terascan_updates(self, enable=True, update_period=0):
+        """Enable sending periodic terascan updates. Laser will send updates in the beginning and in the end of every terascan segment.
+
+        :param enable bool: Enable terascan updates
+        :param update_period float: Sends updates every update_period percents of the segment (this option doesn't seem to be working currently).
         """
-        Enable sending periodic terascan updates.
-        If enabled, laser will send updates in the beginning and in the end of every terascan segment.
-        If ``update_period!=0``, it will also send updates every ``update_period`` percents of the segment (this option doesn't seem to be working currently).
-        """
-        _, reply = self.query("scan_stitch_output",
-                              {"operation": ("start" if enable else "stop"), "update": [update_period]})
-        if reply["status"][0] == 1:
+        _, reply = self.send("scan_stitch_output", {"operation": ("start" if enable else "stop"), "update": [update_period]})
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't setup TeraScan updates: operation failed")
-        if reply["status"][0] == 2:
+        if reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't setup TeraScan updates: incorrect update rate")
-        if reply["status"][0] == 3:
+        if reply[-1]["status"][0] == 3:
             pass
             #self.log.warning("can't setup TeraScan: TeraScan not available")
         self._last_status[self._terascan_update_op] = None
 
     def check_terascan_update(self):
-        """
-        Check the latest terascan update.
-        Return ``None`` if none are available, or a dictionary ``{"wavelength":current_wavelength, "operation":op}``,
-        where ``op`` is ``"scanning"`` (scanning in progress), ``"stitching"`` (stitching in progress), ``"finished"`` (scan is finished), or ``"repeat"`` (segment is repeated).
+        """Check the latest terascan update.
+
+        :return dict: terascan report {'wavelength': current_wavelength, 'operation': op}``,
+        where op is:
+            'scanning': scanning in progress
+            'stitching': stitching in progress
+            'finished': scan is finished
+            'repeat': segment is repeated
         """
         self.update_reports()
         rep = self._last_status.get(self._terascan_update_op, None)
@@ -453,10 +493,10 @@ class M2Laser:
         """
         self._check_terascan_type(scan_type)
         _, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
-        if reply["status"][0] == 1:
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't stop TeraScan: operation failed")
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't stop TeraScan: TeraScan not available")
         if sync:
@@ -478,17 +518,17 @@ class M2Laser:
         self._check_terascan_type(scan_type)
         _, reply = self.send("scan_stitch_status", {"scan": scan_type})
         status = {}
-        if reply["status"][0] == 0:
+        if reply[-1]["status"][0] == 0:
             status["status"] = "stopped"
             status["range"] = None
-        elif reply["status"][0] == 1:
+        elif reply[-1]["status"][0] == 1:
             if reply["operation"][0] == 0:
                 status["status"] = "stitching"
-            elif reply["operation"][0] == 1:
+            elif reply[-1]["operation"][0] == 1:
                 status["status"] = "scanning"
             status["range"] = c / (reply["start"][0] / 1E9), c / (reply["stop"][0] / 1E9)
             status["current"] = c / (reply["current"][0] / 1E9) if reply["current"][0] else 0
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't stop TeraScan: TeraScan not available")
         web_status = self._as_web_status(web_status)
@@ -529,19 +569,19 @@ class M2Laser:
                 self.lock_etalon()
                 self.unlock_reference_cavity()
         _, reply = self.send("fast_scan_start", {"scan": scan_type, "width": [width / 1E9], "time": [time]})
-        if reply["status"][0] == 1:
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning(("can't start fast scan: width too great for the current tuning position")
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't start fast scan: reference cavity not fitted")
-        elif reply["status"][0] == 3:
+        elif reply[-1]["status"][0] == 3:
             pass
             #self.log.warning("can't start fast scan: ERC not fitted")
-        elif reply["status"][0] == 4:
+        elif reply[-1]["status"][0] == 4:
             pass
             #self.log.warning("can't start fast scan: invalid scan type")
-        elif reply["status"][0] == 5:
+        elif reply[-1]["status"][0] == 5:
             pass
             #self.log.warning("can't start fast scan: time >10000 seconds")
         if sync:
@@ -563,16 +603,16 @@ class M2Laser:
         """
         self._check_fast_scan_type(scan_type)
         _, reply = self.send("fast_scan_stop" if return_to_start else "fast_scan_stop_nr", {"scan": scan_type})
-        if reply["status"][0] == 1:
+        if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't stop fast scan: operation failed")
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't stop fast scan: reference cavity not fitted")
-        elif reply["status"][0] == 3:
+        elif reply[-1]["status"][0] == 3:
             pass
             #self.log.warning("can't stop fast scan: ERC not fitted")
-        elif reply["status"][0] == 4:
+        elif reply[-1]["status"][0] == 4:
             pass
             #self.log.warning("can't stop fast scan: invalid scan type")
         if sync:
@@ -588,23 +628,23 @@ class M2Laser:
         self._check_fast_scan_type(scan_type)
         _, reply = self.query("fast_scan_poll", {"scan": scan_type})
         status = {}
-        if reply["status"][0] == 0:
+        if reply[-1]["status"][0] == 0:
             status["status"] = "stopped"
-        elif reply["status"][0] == 1:
+        elif reply[-1]["status"][0] == 1:
             status["status"] = "scanning"
-        elif reply["status"][0] == 2:
+        elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't poll fast scan: reference cavity not fitted")
-        elif reply["status"][0] == 3:
+        elif reply[-1]["status"][0] == 3:
             pass
             #self.log.warning("can't poll fast scan: ERC not fitted")
-        elif reply["status"][0] == 4:
+        elif reply[-1]["status"][0] == 4:
             pass
             #self.log.warning("can't poll fast scan: invalid scan type")
         else:
             pass
             #self.log.warning("can't determine fast scan status: {}".format(reply["status"][0]))
-        status["value"] = reply["tuner_value"][0]
+        status["value"] = reply[-1]["tuner_value"][0]
         return status
 
     def stop_scan_web(self, scan_type):
@@ -691,22 +731,23 @@ class M2Laser:
         message = {'message': {'transmission_id': [self.transmission_id], 'op': op, 'parameters': dict(params)}}
         return json.dumps(message)
 
-    def _parse_message(self, message):
+    def _parse_messages(self, message):
         """ Parses a standard format json message into a dictionary
 
         :param message: json string
         :return: message dictionary
         """
-        pmessage = json.loads(message)
-        if 'message' not in pmessage:
-            pass
-            #self.log.warning('coudn't decode message: {}'.format(message))
-        pmessage = pmessage['message']
-        for key in ['transmission_id', 'op', 'parameters']:
-            if key not in pmessage:
+        pmessages = json.loads(message)
+        for i in range(len(pmessages)):
+            if 'message' not in pmessages[i]:
                 pass
-                #self.log.warning("parameter '{}' not in the message {}".format(key,msg))
-        return pmessage
+                #self.log.warning('coudn't decode message: {}'.format(message))
+            pmessages[i] = pmessages[i]['message']
+            for key in ['transmission_id', 'op', 'parameters']:
+                if key not in pmessages[i]:
+                    pass
+                    #self.log.warning("parameter '{}' not in the message {}".format(key,msg))
+        return pmessages
 
     _parse_errors = ["unknown", "JSON parsing error", "'message' string missing",
                      "'transmission_id' string missing", "No 'transmission_id' value",
@@ -719,15 +760,21 @@ class M2Laser:
         :param reply: json reply from laser
         :return: reply operation dictionary, reply parameters dictionary
         """
-        preply = self._parse_message(reply)
-        if preply["op"] == "parse_fail":
-            parameters = preply["parameters"]
-            perror = parameters["protocol_error"][0]
-            perror_description = "unknown" if perror>=len(self._parse_errors) else self._parse_errors[perror]
-            error_message = "device parse error: transmission_id={}, error={}({}), error point='{}'".format(
-                parameters.get("transmission", ["NA"])[0], perror, perror_description, parameters.get("JSON_parse_error","NA"))
-            #self.log.warning(error_message)
-        return preply["op"], preply["parameters"]
+        op_reply = []
+        parameters_reply = []
+        reply = reply.decode("utf-8")
+        preplies = self._parse_messages('[' + reply.replace('}{', '},{') + ']')
+        for preply in preplies:
+            if preply["op"] == "parse_fail":
+                parameters = preply["parameters"]
+                perror = parameters["protocol_error"][0]
+                perror_description = "unknown" if perror>=len(self._parse_errors) else self._parse_errors[perror]
+                error_message = "device parse error: transmission_id={}, error={}({}), error point='{}'".format(
+                    parameters.get("transmission", ["NA"])[0], perror, perror_description, parameters.get("JSON_parse_error","NA"))
+                #self.log.warning(error_message)
+            op_reply.append(preply["op"])
+            parameters_reply.append(preply["parameters"])
+        return op_reply, parameters_reply
 
     def _send_websocket_request(self, message):
         """ Sends a websocket request
@@ -804,12 +851,23 @@ class M2Laser:
         self.update_reports()
         return self.get_last_report(op)
 
-    def wait_for_report(self, timeout=None):
-        self.socket.settimeout(timeout)
-        report = self.socket.recv(1024)
-        op_report, parameters_report = self._parse_reply(report)
-        self.socket.settimeout(self.timeout)
-        if not self._is_report_op(op_report):
-            pass
-            #self.log.warning("received reply while waiting for a report")
-        return parameters_report
+    def wait_for_report(self, op, timeout=None):
+        """Waits for a report on the given operation
+
+        :param op string: Operation waited on
+        :param timeout float: Time before operation quits
+        :return dict: report
+        """
+        self.socket.settimeout(5)
+        while True:
+            report = self.socket.recv(1024)
+            op_reports, parameters_reports = self._parse_reply(report)
+            for op_report, parameters_report in zip(op_reports, parameters_reports):
+                print(op_report)
+                print(parameters_report)
+
+                if not self._is_report_op(op_report):
+                    pass
+                    #self.log.warning("received reply while waiting for a report")
+                if op_report == self._make_report_op(op):
+                    return parameters_report
