@@ -122,12 +122,56 @@ class M2Laser:
         else:
             return None
 
-    def flush(self, bits=1024):
+    def flush(self, bits=10000):
         """ Flush read buffer
         """
 
         self.set_timeout(5)
         return self.socket.recv(bits)
+
+    def update_reports(self, timeout=0.):
+        """Check for fresh operation reports."""
+        timeout = max(timeout, 0.001)
+        self.socket.settimeout(timeout)
+        try:
+            report = self.socket.recv(1024)
+        except:
+            pass
+            # self.log.warning("received reply while waiting for a report: '{}'".format(report[0]))
+        self.socket.settimeout(self.timeout)
+
+    def get_last_report(self, op):
+        """Get the latest report for the given operation"""
+        rep = self._last_status.get(op, None)
+        if rep:
+            return "fail" if rep["report"][0] else "success"
+        return None
+
+    def check_report(self, op):
+        """Check and return the latest report for the given operation"""
+        self.update_reports()
+        return self.get_last_report(op)
+
+    def wait_for_report(self, op, timeout=None):
+        """Waits for a report on the given operation
+
+        :param op string: Operation waited on
+        :param timeout float: Time before operation quits
+        :return dict: report
+        """
+        self.socket.settimeout(5)
+        while True:
+            report = self.socket.recv(10000)
+            op_reports, parameters_reports = self._parse_reply(report)
+            for op_report, parameters_report in zip(op_reports, parameters_reports):
+                print(op_report)
+                print(parameters_report)
+
+                if not self._is_report_op(op_report):
+                    pass
+                    #self.log.warning("received reply while waiting for a report")
+                if op_report == self._make_report_op(op):
+                    return parameters_report
 
     def connect_wavemeter(self, sync=True):
         """ Connect to the wavemeter via websocket, if sync==True wait until the connection is established
@@ -232,9 +276,9 @@ class M2Laser:
             return self.wait_for_report('set_wav_m', timeout=timeout)
 
     def check_tuning_report(self):
-        """ TODO: Fix this
-        Check wavelength fine-tuning report
-        Return ``"success"`` or ``"fail"`` if the operation is complete, or ``None`` if it is still in progress.
+        """Check wavelength fine-tuning report
+
+        :return: 'success' or 'fail' if the operation is complete, or None if it is still in progress.
         """
         return self.check_report("set_wave_m_r")
 
@@ -349,33 +393,8 @@ class M2Laser:
         if sync:
             self.wait_for_report("fine_tune_resonator")
 
-    def _check_terascan_type(self, scan_type):
-        """Checks that the terascan type is valid.
-
-        :param scan_type string: Terascan type
-        """
-
-        if scan_type not in {"coarse", "medium", "fine", "line"}:
-            pass
-            #self.log.warning("unknown terascan type: {}".format(scan_type))
-        if scan_type == "coarse":
-            pass
-            #self.log.warning("coarse scan is not currently available")
-
     _terascan_rates = [50E3, 100E3, 200E3, 500E3, 1E6, 2E6, 5E6, 10E6, 20E6, 50E6, 100E6, 200E6, 500E6, 1E9, 2E9, 5E9,
                        10E9, 15E9, 20E9, 50E9, 100E9]
-
-    def _trunc_terascan_rate(self, rate):
-        """Chooses the closest terascan rate
-
-        :param rate: Input terascan rate
-        :return: Closest terascan rate
-        """
-
-        for tr in self._terascan_rates[::-1]:
-            if rate >= tr:
-                return tr
-        return self._terascan_rates[0]
 
     def setup_terascan(self, scan_type, scan_range, rate, trunc_rate=True):
         """
@@ -424,7 +443,7 @@ class M2Laser:
             'fine': All elements, rate from 20 GHz/s to 1 MHz/s
             'line': All elements, rate from 20 GHz/s to 50 kHz/s
         :param sync bool: Wait until the scan is set up (not until the whole scan is complete)
-        :param sync_done bool: wait until the whole scan is complete.
+        :param sync_done bool: wait until the whole scan is complete
         """
         self._check_terascan_type(scan_type)
         if sync:
@@ -440,6 +459,8 @@ class M2Laser:
             self.wait_for_terascan_update()
         if sync_done:
             self.wait_for_report("scan_stitch_op")
+
+    _terascan_update_op = "wavelength"
 
     def enable_terascan_updates(self, enable=True, update_period=0):
         """Enable sending periodic terascan updates. Laser will send updates in the beginning and in the end of every terascan segment.
@@ -462,7 +483,7 @@ class M2Laser:
     def check_terascan_update(self):
         """Check the latest terascan update.
 
-        :return dict: terascan report {'wavelength': current_wavelength, 'operation': op}``,
+        :return dict: Terascan report {'wavelength': current_wavelength, 'operation': op}
         where op is:
             'scanning': scanning in progress
             'stitching': stitching in progress
@@ -474,22 +495,28 @@ class M2Laser:
         return rep
 
     def wait_for_terascan_update(self):
-        """Wait until a new terascan update is available"""
+        """Wait until a new terascan update is available
+        
+        :return dict: Terascan report
+        """
         self.wait_for_report(self._terascan_update_op)
         return self.check_terascan_update()
 
     def check_terascan_report(self):
-        """
-        Check report on terascan start.
-        Return ``"success"`` or ``"fail"`` if the operation is complete, or ``None`` if it is still in progress.
+        """Check report on terascan start.
+        
+        :return: 'success' or 'fail' if the operation is complete, or None if it is still in progress
         """
         return self.check_report("scan_stitch_op")
 
     def stop_terascan(self, scan_type, sync=False):
-        """
-        Stop terascan of the given type.
-
-        If ``sync==True``, wait until the operation is complete.
+        """Stop terascan of the given type.
+        
+        :param scan type string: Scan type
+            'medium': BRF+etalon, rate from 100 GHz/s to 1 GHz/s
+            'fine': All elements, rate from 20 GHz/s to 1 MHz/s
+            'line': All elements, rate from 20 GHz/s to 50 kHz/s
+        :param sync_done bool: wait until the scan stop is complete.
         """
         self._check_terascan_type(scan_type)
         _, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
@@ -505,14 +532,21 @@ class M2Laser:
     _web_scan_status_str = ['off', 'cont', 'single', 'flyback', 'on', 'fail']
 
     def get_terascan_status(self, scan_type, web_status="auto"):
-        """
-        Get status of a terascan of a given type.
-        Return dictionary with 4 items:
-            ``"current"``: current laser frequency
-            ``"range"``: tuple with the fill scan range
-            ``"status"``: can be ``"stopped"`` (scan is not in progress), ``"scanning"`` (scan is in progress),
-            or ``"stitching"`` (scan is in progress, but currently stitching)
-            ``"web"``: where scan is running in web interface (some failure modes still report ``"scanning"`` through the usual interface);
+        """Get status of a terascan of a given type.
+        
+        :param scan type string: Scan type
+            'medium': BRF+etalon, rate from 100 GHz/s to 1 GHz/s
+            'fine': All elements, rate from 20 GHz/s to 1 MHz/s
+            'line': All elements, rate from 20 GHz/s to 50 kHz/s
+        :param web_status: Don't really know what this is
+        :return dict: Dictionary with 4 items:
+            'current': current laser frequency
+            'range': tuple with the fill scan range
+            'status': Laser status
+                'stopped': Scan is not in progress)
+                'scanning': Scan is in progress
+                'stitching': Scan is in progress, but currently stitching
+            'web': Where scan is running in web interface (some failure modes still report 'scanning' through the usual interface);
             only available if the laser web connection is on.
         """
         self._check_terascan_type(scan_type)
@@ -522,12 +556,12 @@ class M2Laser:
             status["status"] = "stopped"
             status["range"] = None
         elif reply[-1]["status"][0] == 1:
-            if reply["operation"][0] == 0:
+            if reply[-1]["operation"][0] == 0:
                 status["status"] = "stitching"
             elif reply[-1]["operation"][0] == 1:
                 status["status"] = "scanning"
-            status["range"] = c / (reply["start"][0] / 1E9), c / (reply["stop"][0] / 1E9)
-            status["current"] = c / (reply["current"][0] / 1E9) if reply["current"][0] else 0
+            status["range"] = reply[-1]["start"][0], reply[-1]["stop"][0]
+            status["current"] = reply[-1]["current"][0] if reply[-1]["current"][0] else 0
         elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't stop TeraScan: TeraScan not available")
@@ -543,22 +577,24 @@ class M2Laser:
                         "ect_continuous", "ecd_ramp",
                         "fringe_test"}
 
-    def _check_fast_scan_type(self, scan_type):
-        if scan_type not in self._fast_scan_types:
-            pass
-            #self.log.warning("unknown fast scan type: {}".format(scan_type))
-
     def start_fast_scan(self, scan_type, width, time, sync=False, setup_locks=True):
-        """
-        Setup and start fast scan.
-        Args:
-            scan_type(str): scan type. Can be ``"cavity_continuous"``, ``"cavity_single"``, ``"cavity_triangular"``,
-                ``"resonator_continuous"``, ``"resonator_single"``, ``"resonator_ramp"``, ``"resonator_triangular"``,
-                ``"ect_continuous"``, ``"ecd_ramp"``, or ``"fringe_test"`` (see ICE manual for details)
-            width(float): scan width (in Hz).
-            time(float): scan time/period (in s).
-            sync(bool): if ``True``, wait until the scan is set up (not until the whole scan is complete).
-            setup_locks(bool): if ``True``, automatically setup etalon and reference cavity locks in the appropriate states.
+        """Setup and start fast scan.
+
+        :param scan_type str: scan type(see ICE manual for details)
+            'cavity_continuous'
+            'cavity_single'
+            'cavity_triangular'
+            'resonator_continuous'
+            'resonator_single'
+            'resonator_ramp'
+            'resonator_triangular'
+            'ect_continuous'
+            'ecd_ramp'
+            'fringe_test'
+        :param width float: scan width (in GHz)
+        :param time float: scan time/period (in s)
+        :param sync bool: Wait until the scan is set up (not until the whole scan is complete)
+        :param setup_locks bool: Automatically setup etalon and reference cavity locks in the appropriate states.
         """
         self._check_fast_scan_type(scan_type)
         if setup_locks:
@@ -568,7 +604,7 @@ class M2Laser:
             elif scan_type.startswith("resonator"):
                 self.lock_etalon()
                 self.unlock_reference_cavity()
-        _, reply = self.send("fast_scan_start", {"scan": scan_type, "width": [width / 1E9], "time": [time]})
+        _, reply = self.send("fast_scan_start", {"scan": scan_type, "width": [width], "time": [time]})
         if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning(("can't start fast scan: width too great for the current tuning position")
@@ -588,18 +624,30 @@ class M2Laser:
             self.wait_for_report("fast_scan_start")
 
     def check_fast_scan_report(self):
-        """
-        Check fast scan report.
-        Return ``"success"`` or ``"fail"`` if the operation is complete, or ``None`` if it is still in progress.
+        """Check fast scan report.
+
+        :return: 'success' or 'fail' if the operation is complete, or None if it is still in progress.
         """
         return self.check_report("fast_scan_start")
 
     def stop_fast_scan(self, scan_type, return_to_start=True, sync=False):
-        """
-        Stop fast scan of the given type.
+        """Stop fast scan of the given type.
 
-        If ``return_to_start==True``, return to the center frequency after stopping; otherwise, stay at the current instantaneous frequency.
-        If ``sync==True``, wait until the operation is complete.
+        :param scan_type str: scan type(see ICE manual for details)
+            'cavity_continuous'
+            'cavity_single'
+            'cavity_triangular'
+            'resonator_continuous'
+            'resonator_single'
+            'resonator_ramp'
+            'resonator_triangular'
+            'ect_continuous'
+            'ecd_ramp'
+            'fringe_test'
+        :param return_to_start bool: Return to start.
+            True: Return to the center frequency after stopping
+            False: Stay at the current instantaneous frequency.
+        :param sync bool: Wait until the operation is complete.
         """
         self._check_fast_scan_type(scan_type)
         _, reply = self.send("fast_scan_stop" if return_to_start else "fast_scan_stop_nr", {"scan": scan_type})
@@ -619,11 +667,22 @@ class M2Laser:
             self.wait_for_report("fast_scan_stop")
 
     def get_fast_scan_status(self, scan_type):
-        """
-        Get status of a fast scan of a given type.
-        Return dictionary with 4 items:
-            ``"status"``: can be ``"stopped"`` (scan is not in progress), ``"scanning"`` (scan is in progress).
-            ``"value"``: current tuner value (in percent).
+        """Get status of a fast scan of a given type.
+
+        :param scan_type str: scan type(see ICE manual for details)
+            'cavity_continuous'
+            'cavity_single'
+            'cavity_triangular'
+            'resonator_continuous'
+            'resonator_single'
+            'resonator_ramp'
+            'resonator_triangular'
+            'ect_continuous'
+            'ecd_ramp'
+            'fringe_test'
+        "return dict: A dictionary with 4 items:
+            'status': 'stopped' - scan is not in progress, or 'scanning' - scan is in progress
+            'value': current tuner value (in percent)
         """
         self._check_fast_scan_type(scan_type)
         _, reply = self.query("fast_scan_poll", {"scan": scan_type})
@@ -648,9 +707,20 @@ class M2Laser:
         return status
 
     def stop_scan_web(self, scan_type):
-        """
-        Stop scan of the current type (terascan or fine scan) using web interface.
-        More reliable than native programming interface, but requires activated web interface.
+        """Stop scan of the current type (terascan or fine scan) using web interface. More reliable than native
+        programming interface, but requires activated web interface.
+
+        :param scan_type str: scan type(see ICE manual for details)
+            'cavity_continuous'
+            'cavity_single'
+            'cavity_triangular'
+            'resonator_continuous'
+            'resonator_single'
+            'resonator_ramp'
+            'resonator_triangular'
+            'ect_continuous'
+            'ecd_ramp'
+            'fringe_test'
         """
         if not self.use_websocket:
             return
@@ -666,11 +736,12 @@ class M2Laser:
     _default_terascan_rates = {"line": 10E6, "fine": 100E6, "medium": 5E9}
 
     def stop_all_operation(self, repeated=True):
-        """
-        Stop all laser operations (tuning and scanning).
-        More reliable than native programming interface, but requires activated web interface.
-        If ``repeated==True``, repeat trying to stop the operations until succeeded (more reliable, but takes more time).
-        Return ``True`` if the operation is success otherwise ``False``.
+        """Stop all laser operations (tuning and scanning). More reliable than native programming interface, but
+        requires activated web interface.
+        TODO: Implement countdown so that this function works
+
+        :param: repeated bool: Repeat trying to stop the operations until succeeded (more reliable, but takes more time).\
+        :return bool: If the operation is a success
         """
         attempts = 0
         ctd = general.Countdown(self.timeout or None)
@@ -737,6 +808,7 @@ class M2Laser:
         :param message: json string
         :return: message dictionary
         """
+        print(message)
         pmessages = json.loads(message)
         for i in range(len(pmessages)):
             if 'message' not in pmessages[i]:
@@ -775,6 +847,15 @@ class M2Laser:
             op_reply.append(preply["op"])
             parameters_reply.append(preply["parameters"])
         return op_reply, parameters_reply
+
+    def _is_report_op(self, op):
+        return op.endswith("_f_r") or op == self._terascan_update_op
+
+    def _make_report_op(self, op):
+        return op if op == self._terascan_update_op else op + "_f_r"
+
+    def _parse_report_op(self, op):
+        return op if op == self._terascan_update_op else op[:-4]
 
     def _send_websocket_request(self, message):
         """ Sends a websocket request
@@ -818,56 +899,36 @@ class M2Laser:
             ws.recv()
             ws.close()
 
-    _terascan_update_op = "wavelength"
-    def _is_report_op(self, op):
-        return op.endswith("_f_r") or op == self._terascan_update_op
+    def _check_terascan_type(self, scan_type):
+        """Checks that the terascan type is valid.
 
-    def _make_report_op(self, op):
-        return op if op == self._terascan_update_op else op + "_f_r"
-
-    def _parse_report_op(self, op):
-        return op if op == self._terascan_update_op else op[:-4]
-
-    def update_reports(self, timeout=0.):
-        """Check for fresh operation reports."""
-        timeout = max(timeout, 0.001)
-        self.socket.settimeout(timeout)
-        try:
-            report = self.socket.recv(1024)
-        except:
-            pass
-            # self.log.warning("received reply while waiting for a report: '{}'".format(report[0]))
-        self.socket.settimeout(self.timeout)
-
-    def get_last_report(self, op):
-        """Get the latest report for the given operation"""
-        rep = self._last_status.get(op, None)
-        if rep:
-            return "fail" if rep["report"][0] else "success"
-        return None
-
-    def check_report(self, op):
-        """Check and return the latest report for the given operation"""
-        self.update_reports()
-        return self.get_last_report(op)
-
-    def wait_for_report(self, op, timeout=None):
-        """Waits for a report on the given operation
-
-        :param op string: Operation waited on
-        :param timeout float: Time before operation quits
-        :return dict: report
+        :param scan_type string: Terascan type
         """
-        self.socket.settimeout(5)
-        while True:
-            report = self.socket.recv(1024)
-            op_reports, parameters_reports = self._parse_reply(report)
-            for op_report, parameters_report in zip(op_reports, parameters_reports):
-                print(op_report)
-                print(parameters_report)
 
-                if not self._is_report_op(op_report):
-                    pass
-                    #self.log.warning("received reply while waiting for a report")
-                if op_report == self._make_report_op(op):
-                    return parameters_report
+        if scan_type not in {"coarse", "medium", "fine", "line"}:
+            pass
+            #self.log.warning("unknown terascan type: {}".format(scan_type))
+        if scan_type == "coarse":
+            pass
+            #self.log.warning("coarse scan is not currently available")
+
+    def _trunc_terascan_rate(self, rate):
+        """Chooses the closest terascan rate
+
+        :param rate: Input terascan rate
+        :return: Closest terascan rate
+        """
+
+        for tr in self._terascan_rates[::-1]:
+            if rate >= tr:
+                return tr
+        return self._terascan_rates[0]
+
+    def _check_fast_scan_type(self, scan_type):
+        """Check that fast scan type is valid
+
+        :param scan_type str: Fast scan type
+        """
+        if scan_type not in self._fast_scan_types:
+            pass
+            #self.log.warning("unknown fast scan type: {}".format(scan_type))
