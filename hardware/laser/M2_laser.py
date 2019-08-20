@@ -58,7 +58,12 @@ class M2Laser(Base, M2LaserInterface):
     def on_deactivate(self):
         """ Deactivate module.
         """
-        self.disconnect_wavemeter()
+        print('in hardware trying to deactivate')
+     #   self.disconnect_wavemeter() #Not ideal to comment this, but for now, an issue with is_wavemeter_connected
+                                    #is causing a crash. Specifically, a problem with _read_websocket_status
+                                    #which is trying to create a websocket connection which is trying to _open_socket
+                                    #but instead I get WinError 10061 No connection could be made because the target machien
+                                    #actively refused it
         self.disconnect_laser()
 
     def connect_laser(self):
@@ -129,7 +134,6 @@ class M2Laser(Base, M2LaserInterface):
         :return bool: get success
         """
         _, reply = self.send(setting, {})
-        print(reply)
        # if reply[-1]['status'] == 'ok':
         if reply['status'] == 'ok':
             return reply
@@ -822,7 +826,7 @@ class M2Laser(Base, M2LaserInterface):
         :param message: json string
         :return: message dictionary
         """
-        print(message)
+#        print(message)
         pmessages = json.loads(message)
         for i in range(len(pmessages)):
             if 'message' not in pmessages[i]:

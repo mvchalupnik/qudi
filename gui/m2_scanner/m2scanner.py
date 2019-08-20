@@ -66,7 +66,12 @@ class M2ScannerGUI(GUIBase):
 
         # setting up the window
         self._mw = M2ControllerWindow()
-    #
+
+
+
+        self._laser_logic.sigUpdate.connect(self.updateGui)
+
+
     #     self._mw.stop_diff_spec_Action.setEnabled(False)
     #     self._mw.resume_diff_spec_Action.setEnabled(False)
     #     self._mw.correct_background_Action.setChecked(self._spectrum_logic.background_correction)
@@ -146,8 +151,10 @@ class M2ScannerGUI(GUIBase):
         """
         # disconnect signals
 #        self._fsd.sigFitsUpdated.disconnect()
-
+        print('in gui trying to deactivate')
         self._mw.close()
+#        self._laser_logic.on_deactivate() #problem when gui is closed, it's not actually deactivating :(
+#        self._laser_logic._laser.on_deactivate()
 
     def show(self):
         """Make window visible and put it above all other windows.
@@ -276,3 +283,27 @@ class M2ScannerGUI(GUIBase):
     #     self._mw.addToolBar(QtCore.Qt.TopToolBarArea,
     #                         self._mw.differential_ToolBar)
     #     return 0
+
+    #wavemeter gui did not use QtCore.Slots (??)
+
+
+    #from laser.py gui
+    @QtCore.Slot()
+    def updateGui(self):
+        """ Update labels, the plot and button states with new data. """
+        #self._mw.currentLabel.setText(
+        #    '{0:6.3f} {1}'.format(
+        #        self._laser_logic.laser_current,
+        #        self._laser_logic.laser_current_unit))
+        #self._mw.powerLabel.setText('{0:6.3f} W'.format(self._laser_logic.laser_power))
+        #self._mw.extraLabel.setText(self._laser_logic.laser_extra)
+
+        self._mw.wvlnRead_disp.setText(str(self._laser_logic.current_wavelength))
+#        self.updateButtonsEnabled()
+
+        print('inside updateGui')
+        print(self._laser_logic.current_wavelength)
+
+        #TODO use for plot?
+        #for name, curve in self.curves.items():
+        #    curve.setData(x=self._laser_logic.data['time'], y=self._laser_logic.data[name])
