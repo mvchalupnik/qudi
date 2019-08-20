@@ -33,7 +33,7 @@
     <property name="title">
      <string>Fi&amp;le</string>
     </property>
-    <addaction name="save_spectrum_Action"/>
+    <addaction name="save_scan_Action"/>
     <addaction name="actionClose"/>
    </widget>
    <widget class="QMenu" name="menuView">
@@ -65,8 +65,8 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="rec_single_spectrum_Action"/>
-   <addaction name="save_spectrum_Action"/>
+   <addaction name="run_scan_Action"/>
+   <addaction name="save_scan_Action"/>
   </widget>
   <widget class="QToolBar" name="background_ToolBar">
    <property name="windowTitle">
@@ -150,7 +150,17 @@
           </widget>
          </item>
          <item>
-          <widget class="QDoubleSpinBox" name="startWvln_doubleSpinBox"/>
+          <widget class="QDoubleSpinBox" name="startWvln_doubleSpinBox">
+           <property name="maximum">
+            <double>1000.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>1.000000000000000</double>
+           </property>
+           <property name="value">
+            <double>750.000000000000000</double>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
@@ -164,7 +174,14 @@
           </widget>
          </item>
          <item>
-          <widget class="QDoubleSpinBox" name="stopWvln_doubleSpinBox"/>
+          <widget class="QDoubleSpinBox" name="stopWvln_doubleSpinBox">
+           <property name="maximum">
+            <double>1000.000000000000000</double>
+           </property>
+           <property name="value">
+            <double>780.000000000000000</double>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
@@ -297,7 +314,7 @@
     <string>&amp;Close</string>
    </property>
   </action>
-  <action name="rec_single_spectrum_Action">
+  <action name="run_scan_Action">
    <property name="icon">
     <iconset>
      <normaloff>../../artwork/icons/qudiTheme/22x22/record-counter.png</normaloff>../../artwork/icons/qudiTheme/22x22/record-counter.png</iconset>
@@ -336,7 +353,7 @@
     <string>D</string>
    </property>
   </action>
-  <action name="save_spectrum_Action">
+  <action name="save_scan_Action">
    <property name="icon">
     <iconset>
      <normaloff>../../artwork/icons/oxygen/22x22/document-save.png</normaloff>../../artwork/icons/oxygen/22x22/document-save.png</iconset>
