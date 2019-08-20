@@ -72,6 +72,18 @@ class M2ScannerGUI(GUIBase):
         self._laser_logic.sigUpdate.connect(self.updateGui)
 
 
+        self._mw.scanType_comboBox.addItems({"Fine","Medium"})
+        self._mw.scanRate_comboBox.setInsertPolicy = 6 #InsertAlphabetically
+        for x in range(0, 14):
+            self._mw.scanRate_comboBox.addItem(str(x))
+
+        self._mw.scanType_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
+        self._mw.scanRate_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
+
+        self.update_calculated_scan_params() #initialize
+
+        #self._mw.scanRate_comboBox.addItems({"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"})
+
     #     self._mw.stop_diff_spec_Action.setEnabled(False)
     #     self._mw.resume_diff_spec_Action.setEnabled(False)
     #     self._mw.correct_background_Action.setChecked(self._spectrum_logic.background_correction)
@@ -285,6 +297,29 @@ class M2ScannerGUI(GUIBase):
     #     return 0
 
     #wavemeter gui did not use QtCore.Slots (??)
+
+    def update_calculated_scan_params(self):
+        finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001] #in GHz/s #TODO: Move?
+        mediumrates = [100, 50, 20, 15, 10, 5, 2, 1] #in GHz/s #TODO: Move?
+        speed_c = 299792458 #speed of light in m/s
+
+        if self._mw.scanType_comboBox.currentText() == 'Fine':
+            scanrate = finerates[int(self._mw.scanRate_comboBox.currentText())]
+        else:
+            #TODO error handling if index is too high!
+            scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())]
+
+        #TODO better number formatting
+
+        startWavelength = self._mw.startWvln_doubleSpinBox.value() #in nm
+        stopWavelength = self._mw.stopWvln_doubleSpinBox.value() #in nm
+
+        diffWavelength = stopWavelength - startWavelength
+        #diffFreq =
+
+        self._mw.calcDwellTime_disp.setText('Hi')
+        self._mw.calcScanRes_disp.setText(str(scanrate)+' GHz')
+        self._mw.calcTotalTime_disp.setText('fdsfd')
 
 
     #from laser.py gui
