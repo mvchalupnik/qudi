@@ -2,7 +2,7 @@
 """
 This module controls an M squared laser
 Written by Graham Joe
-testing
+testing testing
 """
 
 from core.module import Base, ConfigOption
