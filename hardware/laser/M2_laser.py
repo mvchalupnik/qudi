@@ -5,9 +5,10 @@ Written by Graham Joe
 """
 
 from core.module import Base, ConfigOption
-from interface.simple_laser_interface import SimpleLaserInterface
+from interface.m2_laser_interface import M2LaserInterface
 from interface.simple_laser_interface import LaserState
 from interface.simple_laser_interface import ShutterState
+from interface.simple_laser_interface import ControlMode
 
 import serial
 import time
@@ -16,7 +17,7 @@ import json
 import websocket
 
 
-class M2Laser:
+class M2Laser(Base, M2LaserInterface):
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -27,19 +28,29 @@ class M2Laser:
             port: 39933
         """
 
-    _modclass = 'laser'
+    _modclass = 'm2laserhardware'
     _modtype = 'hardware'
 
-    def __init__(self, ip, port, timeout=5):
-        # for now use '10.243.43.58' and 39933
-        self.address = (ip, port)
-        self.timeout = timeout
+    _ip = ConfigOption('ip', missing='error')
+    _port = ConfigOption('port', missing='error')
+    _timeout = ConfigOption('port', 5, missing='warn') #good default setting for timeout?
+
+    #def __init__(self, ip=_ip, port = _port, timeout=5):
+    #    # for now use '10.243.43.58' and 39933
+    #    self.address = (ip, port)
+    #    self.timeout = timeout
+    #    self.transmission_id = 1
+    #    self._last_status = {}
+
+    def on_activate(self):
+        """ Initialization performed during activation of the module (like in e.g. mw_source_dummy.py)
+        """
+
+        self.address = (self._ip, self._port)
+        self.timeout = self._timeout
         self.transmission_id = 1
         self._last_status = {}
 
-    def on_activate(self):
-        """ Activate module.
-        """
         self.connect_laser()
         self.connect_wavemeter()
 
@@ -68,7 +79,7 @@ class M2Laser:
         self.socket.close()
         self.socket = None
 
-    def set_timeout(self, timeout):
+    def set_timeout(self, timeout): #????Look at
         """ Sets the timeout in seconds for connecting or sending/receiving
 
         :param timeout: timeout in seconds
@@ -76,7 +87,7 @@ class M2Laser:
         self.timeout = timeout
         self.socket.settimeout(timeout)
 
-    def send(self, op, parameters, transmission_id=None):
+    def send(self, op, parameters, transmission_id=None): #LOOK AT
         """ Send json message to laser
 
         :param op: operation to be performed
@@ -89,10 +100,10 @@ class M2Laser:
         reply = self.socket.recv(1024)
         #self.log(reply)
         op_reply, parameters_reply = self._parse_reply(reply)
-        self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1]
+        self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1] #just commented
         return op_reply, parameters_reply
 
-    def set(self, setting, value, key_name='setting'):
+    def set(self, setting, value, key_name='setting'): #LOOK AT
         """ Sets a laser parameter
 
         :param setting: string containing the setting to be set
@@ -110,14 +121,16 @@ class M2Laser:
         else:
             return False
 
-    def get(self, setting):
+    def get(self, setting): #LOOK AT
         """ Gets a laser parameter
 
         :param setting: string containing the setting
         :return bool: get success
         """
         _, reply = self.send(setting, {})
-        if reply[-1]['status'] == 'ok':
+        print(reply)
+       # if reply[-1]['status'] == 'ok':
+        if reply['status'] == 'ok':
             return reply
         else:
             return None
@@ -932,3 +945,5 @@ class M2Laser:
         if scan_type not in self._fast_scan_types:
             pass
             #self.log.warning("unknown fast scan type: {}".format(scan_type))
+
+
