@@ -349,8 +349,8 @@ class M2ScannerGUI(GUIBase):
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
 #        self.updateButtonsEnabled()
 
-        print('inside updateGui')
-        print(self._laser_logic.current_wavelength)
+      #  print('inside updateGui')
+     #   print(self._laser_logic.current_wavelength)
 
         #TODO use for plot?
         #for name, curve in self.curves.items():

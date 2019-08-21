@@ -25,10 +25,27 @@ from qtpy import QtCore
 
 from core.module import Connector, ConfigOption
 from logic.generic_logic import GenericLogic
+from logic.counter_logic import CounterLogic
 from interface.simple_laser_interface import ControlMode, ShutterState, LaserState
 
 
-class M2LaserLogic(GenericLogic):
+
+from collections import OrderedDict
+import matplotlib.pyplot as plt
+
+from core.module import StatusVar
+from logic.generic_logic import GenericLogic
+from interface.slow_counter_interface import CountingMode
+from core.util.mutex import Mutex
+
+
+
+class M2LaserLogic(CounterLogic):
+
+
+
+
+
     """ Logic module agreggating multiple hardware switches.
     """
     _modclass = 'm2laser'
@@ -40,7 +57,102 @@ class M2LaserLogic(GenericLogic):
 
     sigUpdate = QtCore.Signal()
 
+
+###############fkjsflks
+    sigCounterUpdated = QtCore.Signal()
+
+    sigCountDataNext = QtCore.Signal()
+
+    sigGatedCounterFinished = QtCore.Signal()
+    sigGatedCounterContinue = QtCore.Signal(bool)
+    sigCountingSamplesChanged = QtCore.Signal(int)
+    sigCountLengthChanged = QtCore.Signal(int)
+    sigCountFrequencyChanged = QtCore.Signal(float)
+    sigSavingStatusChanged = QtCore.Signal(bool)
+    sigCountStatusChanged = QtCore.Signal(bool)
+    sigCountingModeChanged = QtCore.Signal(CountingMode)
+
+
+
+    ## declare connectors
+    counter1 = Connector(interface='SlowCounterInterface')
+    savelogic = Connector(interface='SaveLogic')
+
+    # status vars
+    _count_length = StatusVar('count_length', 300)
+    _smooth_window_length = StatusVar('smooth_window_length', 10)
+    _counting_samples = StatusVar('counting_samples', 1)
+    _count_frequency = StatusVar('count_frequency', 50)
+    _saving = StatusVar('saving', False)
+
+
+
+
+
+
+
+    def __init__(self, config, **kwargs):
+        """ Create CounterLogic object with connectors.
+
+        @param dict config: module configuration
+        @param dict kwargs: optional parameters
+        """
+        super().__init__(config=config, **kwargs)
+
+        #locking for thread safety
+        self.threadlock = Mutex()
+
+        self.log.debug('The following configuration was found.')
+
+        # checking for the right configuration
+        for key in config.keys():
+            self.log.debug('{0}: {1}'.format(key, config[key]))
+
+        # in bins
+        self._count_length = 300
+        self._smooth_window_length = 10
+        self._counting_samples = 1      # oversampling
+        # in hertz
+        self._count_frequency = 50
+
+        # self._binned_counting = True  # UNUSED?
+        self._counting_mode = CountingMode['CONTINUOUS']
+
+        self._saving = False
+        return
+
+
+
+
     def on_activate(self):
+        # Connect to hardware and save logic
+        print('here i am')
+        self._counting_device = self.counter1()
+       #### self._save_logic = self.savelogic()
+
+        # Recall saved app-parameters
+        if 'counting_mode' in self._statusVariables:
+            self._counting_mode = CountingMode[self._statusVariables['counting_mode']]
+
+        constraints = self.get_hardware_constraints()
+        number_of_detectors = constraints.max_detectors
+
+        # initialize data arrays
+        self.countdata = np.zeros([len(self.get_channels()), self._count_length])
+        self.countdata_smoothed = np.zeros([len(self.get_channels()), self._count_length])
+        self.rawdata = np.zeros([len(self.get_channels()), self._counting_samples])
+        self._already_counted_samples = 0  # For gated counting
+        self._data_to_save = []
+
+        # Flag to stop the loop
+        self.stopRequested = False
+
+        self._saving_start_time = time.time()
+
+        # connect signals
+        self.sigCountDataNext.connect(self.count_loop_body, QtCore.Qt.QueuedConnection)
+
+
         """ Prepare logic module for work.
         """
         self._laser = self.laser()
@@ -66,6 +178,9 @@ class M2LaserLogic(GenericLogic):
         self.start_query_loop() #why put this here also?
 
     def on_deactivate(self):
+
+
+
         """ Deactivate modeule.
         """
         print('TRYING TO DEACTIVATE in logic')
@@ -74,6 +189,7 @@ class M2LaserLogic(GenericLogic):
             time.sleep(self.queryInterval / 1000)
             QtCore.QCoreApplication.processEvents()
 
+    #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
     @QtCore.Slot()
     def check_laser_loop(self):
         """ Get power, current, shutter state and temperatures from laser. """
@@ -87,6 +203,10 @@ class M2LaserLogic(GenericLogic):
             #print('laserloop', QtCore.QThread.currentThreadId())
             self.laser_state = self._laser.get_laser_state() #! look at
             self.current_wavelength = self._laser.get_wavelength()
+
+            #ADDED
+            self.count_loop_body()
+            #THIS CURRENTLY WILL NOT RUN, probably because threads are locked. TODO FIX
 
             #unused below??
             for k in self.data:
@@ -128,4 +248,59 @@ class M2LaserLogic(GenericLogic):
     #        self.data[name] = np.zeros(self.bufferLength)
 
 
+    #overload from counter_logic.py
+    def count_loop_body(self):
+        """ This method gets the count data from the hardware for the continuous counting mode (default).
 
+        It runs repeatedly in the logic module event loop by being connected
+        to sigCountContinuousNext and emitting sigCountContinuousNext through a queued connection.
+        """
+        if self.module_state() == 'locked':
+            with self.threadlock:
+                # check for aborts of the thread in break if necessary
+                if self.stopRequested:
+                    # close off the actual counter
+                    cnt_err = self._counting_device.close_counter()
+                    clk_err = self._counting_device.close_clock()
+                    if cnt_err < 0 or clk_err < 0:
+                        self.log.error('Could not even close the hardware, giving up.')
+                    # switch the state variable off again
+                    self.stopRequested = False
+                    self.module_state.unlock()
+                    self.sigCounterUpdated.emit()
+                    return
+
+                #ADDED: read the current wavelength value
+
+
+                # read the current counter value
+                self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
+                print('this is rawdata')
+                print(self.rawdata)
+                #or this way, I can check the wavelength right before and right after I get a count :/
+                #and then average them to assign the "wavelength" the counts were taken at
+
+                #ADDED: read the current wavelength value
+                self.wavelengthdata = self._laser.get_wavelength()
+                #redefine another counter_logic func so this gets put into an array and used!
+
+                #alternatively, view confocal or odmr_logic - they also have to tie together another variable with counts
+                #Also reading the current wavelength value better be much much faster than the clock speed
+
+                if self.rawdata[0, 0] < 0:
+                    self.log.error('The counting went wrong, killing the counter.')
+                    self.stopRequested = True
+                else:
+                    if self._counting_mode == CountingMode['CONTINUOUS']:
+                        self._process_data_continous()
+                    elif self._counting_mode == CountingMode['GATED']:
+                        self._process_data_gated()
+                    elif self._counting_mode == CountingMode['FINITE_GATED']:
+                        self._process_data_finite_gated()
+                    else:
+                        self.log.error('No valid counting mode set! Can not process counter data.')
+
+            # call this again from event loop
+            self.sigCounterUpdated.emit()
+            self.sigCountDataNext.emit()
+        return
