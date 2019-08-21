@@ -71,18 +71,20 @@ class M2ScannerGUI(GUIBase):
 
         self._laser_logic.sigUpdate.connect(self.updateGui)
 
-
+        self._mw.scanType_comboBox.setInsertPolicy = 6  # InsertAlphabetically
         self._mw.scanType_comboBox.addItems({"Fine","Medium"})
+
         self._mw.scanRate_comboBox.setInsertPolicy = 6 #InsertAlphabetically
         for x in range(0, 14):
             self._mw.scanRate_comboBox.addItem(str(x))
 
         self._mw.scanType_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.scanRate_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
+        self._mw.startWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
+        self._mw.stopWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
 
         self.update_calculated_scan_params() #initialize
 
-        #self._mw.scanRate_comboBox.addItems({"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"})
 
     #     self._mw.stop_diff_spec_Action.setEnabled(False)
     #     self._mw.resume_diff_spec_Action.setEnabled(False)
@@ -304,22 +306,29 @@ class M2ScannerGUI(GUIBase):
         speed_c = 299792458 #speed of light in m/s
 
         if self._mw.scanType_comboBox.currentText() == 'Fine':
-            scanrate = finerates[int(self._mw.scanRate_comboBox.currentText())]
+            scanrate = finerates[int(self._mw.scanRate_comboBox.currentText())]* 10**9 #in Hz/s
         else:
-            #TODO error handling if index is too high!
-            scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())]
+            #TODO error handling if index is too high for medium
+            scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())]*10**9 #in Hz/s
 
-        #TODO better number formatting
 
-        startWavelength = self._mw.startWvln_doubleSpinBox.value() #in nm
-        stopWavelength = self._mw.stopWvln_doubleSpinBox.value() #in nm
+        startWvln = self._mw.startWvln_doubleSpinBox.value() * 10**-9 #in m
+        stopWvln = self._mw.stopWvln_doubleSpinBox.value()*10**-9 #in m
+        midWvln = (stopWvln + startWvln)/2 #in m
+        rangeWvln = (stopWvln - startWvln) #in m
 
-        diffWavelength = stopWavelength - startWavelength
-        #diffFreq =
+        startFreq = speed_c/ stopWvln #in Hz
+        stopFreq = speed_c/ startWvln #in Hz
+        midFreq = (stopFreq + startFreq)/2 #in Hz
+        rangeFreq = stopFreq - startFreq #in Hz
+        scanrate_wvln = scanrate * speed_c/(midFreq**2) #in m/s
 
-        self._mw.calcDwellTime_disp.setText('Hi')
-        self._mw.calcScanRes_disp.setText(str(scanrate)+' GHz')
-        self._mw.calcTotalTime_disp.setText('fdsfd')
+
+        self._mw.calcDwellTime_disp.setText('Hi') #Dwell time is related to how the counts get plotted. It is not
+                                                #a property of the laser, but gets used for interpreting counts
+        self._mw.calcScanRes_disp.setText("{0:.3f} GHz/s \n{1:.3f} pm/s".format(scanrate*10**-9,scanrate_wvln*10**12))
+        totaltime = rangeFreq/scanrate
+        self._mw.calcTotalTime_disp.setText("{0:.0f} min, {1:.0f} sec".format(totaltime//60,totaltime%60))
 
 
     #from laser.py gui
@@ -333,7 +342,11 @@ class M2ScannerGUI(GUIBase):
         #self._mw.powerLabel.setText('{0:6.3f} W'.format(self._laser_logic.laser_power))
         #self._mw.extraLabel.setText(self._laser_logic.laser_extra)
 
-        self._mw.wvlnRead_disp.setText(str(self._laser_logic.current_wavelength))
+        #TODO throw error if startwavelength > stopwavlength
+        #OR? do this in update_calcualated_scan_params???
+        #TODO don't throw an error, but just don't allow the action to occur (eg don't update gui and laser to reflect it)
+
+        self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
 #        self.updateButtonsEnabled()
 
         print('inside updateGui')
