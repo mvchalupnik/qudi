@@ -18,7 +18,8 @@ import json
 import websocket
 
 
-class M2Laser(Base, M2LaserInterface):
+#class M2Laser(Base, M2LaserInterface):
+class M2Laser(): #for debugging
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -35,6 +36,8 @@ class M2Laser(Base, M2LaserInterface):
     _ip = ConfigOption('ip', missing='error')
     _port = ConfigOption('port', missing='error')
     _timeout = ConfigOption('port', 5, missing='warn') #good default setting for timeout?
+
+    buffersize = 1024
 
     #def __init__(self, ip=_ip, port = _port, timeout=5):
     #    # for now use '10.243.43.58' and 39933
@@ -103,10 +106,10 @@ class M2Laser(Base, M2LaserInterface):
         """
         message = self._build_message(op, parameters, transmission_id)
         self.socket.sendall(message.encode('utf-8'))
-        reply = self.socket.recv(1024)
+        reply = self.socket.recv(self.buffersize)
         #self.log(reply)
         op_reply, parameters_reply = self._parse_reply(reply)
-        self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1] #just commented
+        self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1]
         return op_reply, parameters_reply
 
     def set(self, setting, value, key_name='setting'): #LOOK AT
@@ -134,25 +137,25 @@ class M2Laser(Base, M2LaserInterface):
         :return bool: get success
         """
         _, reply = self.send(setting, {})
-       # if reply[-1]['status'] == 'ok':
-        if reply['status'] == 'ok':
+        if reply[-1]['status'] == 'ok':
+       # if reply['status'] == 'ok':
             return reply
         else:
             return None
 
-    def flush(self, bits=10000):
+    def flush(self, bits=10000000):
         """ Flush read buffer
         """
 
-        self.set_timeout(5)
+        self.set_timeout(5) #?
         return self.socket.recv(bits)
 
     def update_reports(self, timeout=0.):
         """Check for fresh operation reports."""
-        timeout = max(timeout, 0.001)
+        timeout = max(timeout, 0.001) #?
         self.socket.settimeout(timeout)
         try:
-            report = self.socket.recv(1024)
+            report = self.socket.recv(self.buffersize)
         except:
             pass
             # self.log.warning("received reply while waiting for a report: '{}'".format(report[0]))
@@ -177,7 +180,7 @@ class M2Laser(Base, M2LaserInterface):
         :param timeout float: Time before operation quits
         :return dict: report
         """
-        self.socket.settimeout(5)
+        self.socket.settimeout(timeout) #modified
         while True:
             report = self.socket.recv(10000)
             op_reports, parameters_reports = self._parse_reply(report)
@@ -190,6 +193,8 @@ class M2Laser(Base, M2LaserInterface):
                     #self.log.warning("received reply while waiting for a report")
                 if op_report == self._make_report_op(op):
                     return parameters_report
+
+
 
     def connect_wavemeter(self, sync=True):
         """ Connect to the wavemeter via websocket, if sync==True wait until the connection is established
@@ -327,6 +332,16 @@ class M2Laser(Base, M2LaserInterface):
         """
         return self.get_full_tuning_status()["current_wavelength"][0]
 
+    def get_terascan_wavelength(self):
+        #use this function to get the wavelength while terascan is running
+        self.flush()
+
+        out = self.get_laser_state()
+        return out['wavelength']
+
+    #TODO if this works do the same for status, ie. stitching vs scanning
+
+
     def stop_tuning(self):
         """Stop fine wavelength tuning."""
         _, reply = self.send("stop_wave_m", {})
@@ -456,7 +471,7 @@ class M2Laser(Base, M2LaserInterface):
 
     def start_terascan(self, scan_type, sync=True, sync_done=True):
         """Start terascan.
-        :param scan type string: Scan type
+        :param scan_type string: Scan type
             'medium': BRF+etalon, rate from 100 GHz/s to 1 GHz/s
             'fine': All elements, rate from 20 GHz/s to 1 MHz/s
             'line': All elements, rate from 20 GHz/s to 50 kHz/s
@@ -473,10 +488,12 @@ class M2Laser(Base, M2LaserInterface):
         elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't start TeraScan: TeraScan not available")
+        print(reply)
+        print('was reply')
         if sync:
             self.wait_for_terascan_update()
-        if sync_done:
-            self.wait_for_report("scan_stitch_op")
+#        if sync_done:
+#            self.wait_for_report("scan_stitch_op") #Prints to command line, also returns the same thing
 
     _terascan_update_op = "wavelength"
 
@@ -827,6 +844,16 @@ class M2Laser(Base, M2LaserInterface):
         :return: message dictionary
         """
 #        print(message)
+#        print(len(message))  # seems messages are greater than the buffer length... not sure why
+
+        if len(message) >= self.buffersize:
+            msg = message.rsplit('},{', 1) #split from right
+            message = msg[0]
+            msg = message.split('},{', 1) #split from left
+            message = msg[1]
+            message = '[{'+ message + '}]'
+#            print(message)
+
         pmessages = json.loads(message)
         for i in range(len(pmessages)):
             if 'message' not in pmessages[i]:
