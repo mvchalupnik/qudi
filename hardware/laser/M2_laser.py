@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 This module controls an M squared laser
-Written by Graham Joe
+Written by Graham Joe, M. Chalupnik
 
 """
 
@@ -18,8 +18,8 @@ import json
 import websocket
 
 
-#class M2Laser(Base, M2LaserInterface):
-class M2Laser(): #for debugging
+class M2Laser(Base, M2LaserInterface):
+#class M2Laser(): #for debugging
     """ Implements the M squared laser.
 
         Example config for copy-paste:

@@ -316,20 +316,32 @@ class M2ScannerGUI(GUIBase):
 
     #wavemeter gui did not use QtCore.Slots (??)
 
+    def get_scan_info(self):
+        finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001]  # in GHz/s #TODO: Move?
+        mediumrates = [100, 50, 20, 15, 10, 5, 2, 1]  # in GHz/s #TODO: Move?
+
+        typebox = self._mw.scanType_comboBox.currentText()
+        if typebox== 'Fine':
+            scanrate = finerates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
+        else:
+            # TODO error handling if index is too high for medium
+            scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
+
+        #TODO handle in case startwavlength is greater than or equal to stopwavlength
+        #requires memory of previous value
+        #OR better, can actually prevent change from occurring by DISABLING???? TODO look into!!!
+        #this may end up being rewritten, but oh well
+        startwvln = self._mw.startWvln_doubleSpinBox.value() * 10 ** -9  # in m
+        stopwvln = self._mw.stopWvln_doubleSpinBox.value() * 10**-9 #in m
+
+        return startwvln, stopwvln, typebox, scanrate
+
     def update_calculated_scan_params(self):
-        finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001] #in GHz/s #TODO: Move?
-        mediumrates = [100, 50, 20, 15, 10, 5, 2, 1] #in GHz/s #TODO: Move?
         speed_c = 299792458 #speed of light in m/s
 
-        if self._mw.scanType_comboBox.currentText() == 'Fine':
-            scanrate = finerates[int(self._mw.scanRate_comboBox.currentText())]* 10**9 #in Hz/s
-        else:
-            #TODO error handling if index is too high for medium
-            scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())]*10**9 #in Hz/s
+        startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
 
 
-        startWvln = self._mw.startWvln_doubleSpinBox.value() * 10**-9 #in m
-        stopWvln = self._mw.stopWvln_doubleSpinBox.value()*10**-9 #in m
         midWvln = (stopWvln + startWvln)/2 #in m
         rangeWvln = (stopWvln - startWvln) #in m
 
@@ -378,7 +390,17 @@ class M2ScannerGUI(GUIBase):
         if self._laser_logic.module_state() == 'locked':
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
+
         else:
             self._mw.run_scan_Action.setText('Stop counter')
             self.sigStartCounter.emit()
+
+            # Adding:
+            startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+
+            #            self._laser_logic.setup_terascan(scantype,(startWvln, stopWvln), scanrate)
+            #            self._laser_logic.start_terascan(scantype)
+
+            self._laser_logic.start_terascan("medium", (750, 751), 10E9)
+
         return self._laser_logic.module_state()
