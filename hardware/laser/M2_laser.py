@@ -854,6 +854,7 @@ class M2Laser(): #for debugging
             message = '[{'+ message + '}]'
 #            print(message)
 
+
         pmessages = json.loads(message)
         for i in range(len(pmessages)):
             if 'message' not in pmessages[i]:
