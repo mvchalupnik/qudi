@@ -52,6 +52,10 @@ class M2ScannerGUI(GUIBase):
     _modclass = 'M2LaserGui'
     _modtype = 'gui'
 
+    sigStartCounter = QtCore.Signal()
+    sigStopCounter = QtCore.Signal()
+
+
     # declare connectors
     laserlogic = Connector(interface='M2LaserLogic')
 
@@ -68,15 +72,27 @@ class M2ScannerGUI(GUIBase):
         self._mw = M2ControllerWindow()
 
 
-
+        #Connect to laser_logic to GUI action
         self._laser_logic.sigUpdate.connect(self.updateGui)
 
+        #connect GUI signals to laser logic action
+        self.sigStartCounter.connect(self._laser_logic.startCount)
+        self.sigStopCounter.connect(self._laser_logic.stopCount)
+
+
+        #set up GUI
         self._mw.scanType_comboBox.setInsertPolicy = 6  # InsertAlphabetically
         self._mw.scanType_comboBox.addItems({"Fine","Medium"})
 
         self._mw.scanRate_comboBox.setInsertPolicy = 6 #InsertAlphabetically
         for x in range(0, 14):
             self._mw.scanRate_comboBox.addItem(str(x))
+
+
+        #####################
+        # Connecting user interactions
+        self._mw.run_scan_Action.triggered.connect(self.start_clicked)
+ #       self._mw.save_scan_Action.triggered.connect(self.save_clicked)
 
         self._mw.scanType_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.scanRate_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
@@ -355,3 +371,14 @@ class M2ScannerGUI(GUIBase):
         #TODO use for plot?
         #for name, curve in self.curves.items():
         #    curve.setData(x=self._laser_logic.data['time'], y=self._laser_logic.data[name])
+
+    def start_clicked(self):
+        """ Handling the Start button to stop and restart the counter.
+        """
+        if self._laser_logic.module_state() == 'locked':
+            self._mw.run_scan_Action.setText('Start counter')
+            self.sigStopCounter.emit()
+        else:
+            self._mw.run_scan_Action.setText('Stop counter')
+            self.sigStartCounter.emit()
+        return self._laser_logic.module_state()

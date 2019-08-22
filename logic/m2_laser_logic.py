@@ -43,9 +43,6 @@ from core.util.mutex import Mutex
 class M2LaserLogic(CounterLogic):
 
 
-
-
-
     """ Logic module agreggating multiple hardware switches.
     """
     _modclass = 'm2laser'
@@ -88,45 +85,9 @@ class M2LaserLogic(CounterLogic):
 
 
 
-
-
-
-    def __init__(self, config, **kwargs):
-        """ Create CounterLogic object with connectors.
-
-        @param dict config: module configuration
-        @param dict kwargs: optional parameters
-        """
-        super().__init__(config=config, **kwargs)
-
-        #locking for thread safety
-        self.threadlock = Mutex()
-
-        self.log.debug('The following configuration was found.')
-
-        # checking for the right configuration
-        for key in config.keys():
-            self.log.debug('{0}: {1}'.format(key, config[key]))
-
-        # in bins
-        self._count_length = 300
-        self._smooth_window_length = 10
-        self._counting_samples = 1      # oversampling
-        # in hertz
-        self._count_frequency = 50
-
-        # self._binned_counting = True  # UNUSED?
-        self._counting_mode = CountingMode['CONTINUOUS']
-
-        self._saving = False
-        return
-
-
-
-
     def on_activate(self):
         # Connect to hardware and save logic
-        print('here i am')
+        print('on_activate is called')
         self._counting_device = self.counter1()
        #### self._save_logic = self.savelogic()
 
@@ -177,10 +138,24 @@ class M2LaserLogic(CounterLogic):
         self.init_data_logging()
         self.start_query_loop() #why put this here also?
 
+
+        #TODO keep for testing only
+  ###      self.startCount() #will it work????
+
     def on_deactivate(self):
+        #taken from counter_logic: (not sure if neccessary?)
+        """ Deinitialisation performed during deactivation of the module.
+        """
+        # Save parameters to disk
+        self._statusVariables['counting_mode'] = self._counting_mode.name
 
+        # Stop measurement
+        if self.module_state() == 'locked':
+            self._stopCount_wait()
 
+        self.sigCountDataNext.disconnect()
 
+        #from laser_logic
         """ Deactivate modeule.
         """
         print('TRYING TO DEACTIVATE in logic')
@@ -188,6 +163,7 @@ class M2LaserLogic(CounterLogic):
         for i in range(5):
             time.sleep(self.queryInterval / 1000)
             QtCore.QCoreApplication.processEvents()
+
 
     #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
     @QtCore.Slot()
@@ -205,7 +181,7 @@ class M2LaserLogic(CounterLogic):
             self.current_wavelength = self._laser.get_wavelength()
 
             #ADDED
-            self.count_loop_body()
+    #####        self.count_loop_body()
             #THIS CURRENTLY WILL NOT RUN, probably because threads are locked. TODO FIX
 
             #unused below??
@@ -255,7 +231,9 @@ class M2LaserLogic(CounterLogic):
         It runs repeatedly in the logic module event loop by being connected
         to sigCountContinuousNext and emitting sigCountContinuousNext through a queued connection.
         """
+        print('count_loop_body runs')
         if self.module_state() == 'locked':
+            print('locked thread in count_loop_body is being accessed')
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
                 if self.stopRequested:
