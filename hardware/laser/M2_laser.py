@@ -488,8 +488,8 @@ class M2Laser(Base, M2LaserInterface):
         elif reply[-1]["status"][0] == 2:
             pass
             #self.log.warning("can't start TeraScan: TeraScan not available")
-        print(reply)
-        print('was reply')
+#        print(reply)
+
         if sync:
             self.wait_for_terascan_update()
 #        if sync_done:

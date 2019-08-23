@@ -192,7 +192,7 @@ class M2LaserLogic(CounterLogic):
             self.log.exception("Exception in laser status loop, throttling refresh rate.")
 
         self.queryTimer.start(qi)
-        self.sigUpdate.emit() #sigUpdate is not currently connected to anything TODO fix or delete
+        self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
 
     @QtCore.Slot()
     def start_query_loop(self):
@@ -253,8 +253,8 @@ class M2LaserLogic(CounterLogic):
 
                 # read the current counter value
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
-                print('this is rawdata')
-                print(self.rawdata)
+              #  print('this is rawdata')
+         #       print(self.rawdata)
                 #or this way, I can check the wavelength right before and right after I get a count :/
                 #and then average them to assign the "wavelength" the counts were taken at
 
@@ -262,18 +262,22 @@ class M2LaserLogic(CounterLogic):
                 #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
                 #not sure right now if that's the case. Probably there's a better way to do this.
                 self.wavelengthdata = self._laser.get_terascan_wavelength()
-                print(self.wavelengthdata)
+          #      print(self.wavelengthdata)
                 #redefine another counter_logic func so this gets put into an array and used!
 
                 #alternatively, view confocal or odmr_logic - they also have to tie together another variable with counts
 
+             #   self.rawdata = np.insert(self.rawdata, 0,self.wavelengthdata,0) #add wavelength data to the front of the array
+             #   print(self.rawdata) #watch - rounding errors? ??? probably all elements must be the same type, which is bad for me
 
-                if self.rawdata[0, 0] < 0:
+             ####   self.xdata =
+
+                if self.rawdata[0, 0] < 0: #counts can't be negative(?)
                     self.log.error('The counting went wrong, killing the counter.')
                     self.stopRequested = True #modified -ed
                 else:
                     if self._counting_mode == CountingMode['CONTINUOUS']:
-                        self._process_data_continous()
+                        self._process_data_continous() #TODO overload this
                     elif self._counting_mode == CountingMode['GATED']:
                         self._process_data_gated()
                     elif self._counting_mode == CountingMode['FINITE_GATED']:
@@ -282,9 +286,65 @@ class M2LaserLogic(CounterLogic):
                         self.log.error('No valid counting mode set! Can not process counter data.')
 
             # call this again from event loop
-            self.sigCounterUpdated.emit() #this also does not appear to be connected to anything??
+            self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI
             self.sigCountDataNext.emit() #this is connected to count_loop_body, so will call this func again
         return
+
+
+#Overload from counter_logic so that we can save wavelength as well as counts
+    def _process_data_continous(self):
+        """
+        Processes the raw data from the counting device
+        @return:
+        """
+  #      for i, ch in enumerate(self.get_channels()): #there should not be more than 1 input channel for data... fixme
+  #          # remember the new count data in circular array #?
+  #          print('debugging HERE')
+  #          print(i)
+  #          print(ch)
+  #          print(self.countdata[i,0])
+  #          print(self.rawdata[i])
+  #          print(np.average(self.rawdata[i]))
+  #          print('was debugging')
+  #          self.countdata[i, 0] = np.average(self.rawdata[i]) #?????
+
+        self.countdata[0, 0] = np.average(self.wavelengthdata)  # ?????
+        self.countdata[1, 0] = np.average(self.rawdata[0])  #
+
+        # move the array to the left to make space for the new data
+        self.countdata = np.roll(self.countdata, -1, axis=1) #Not sure if roll is what we want here
+        # also move the smoothing array
+        self.countdata_smoothed = np.roll(self.countdata_smoothed, -1, axis=1) #?? what is this?
+        # calculate the median and save it
+        window = -int(self._smooth_window_length / 2) - 1 #why/what?
+        for i, ch in enumerate(self.get_channels()):
+            self.countdata_smoothed[i, window:] = np.median(self.countdata[i,
+                                                            -self._smooth_window_length:])
+
+        # save the data if necessary
+        if self._saving:
+             # if oversampling is necessary #oversampling should not be relevant for the terascans
+            if self._counting_samples > 1: #this block should not run.! delete?
+                chans = self.get_channels()
+                self._sampling_data = np.empty([len(chans) + 1, self._counting_samples])
+                self._sampling_data[0, :] = time.time() - self._saving_start_time
+                for i, ch in enumerate(chans):
+                    self._sampling_data[i+1, 0] = self.rawdata[i]
+
+                self._data_to_save.extend(list(self._sampling_data))
+            # if we don't want to use oversampling
+            else:
+                # append tuple to data stream (timestamp, average counts)
+                chans = self.get_channels() #this should always be 1 for us!!! todo error if not
+                newdata = np.empty((len(chans) + 1, ))
+                newdata[0] = time.time() - self._saving_start_time
+                for i, ch in enumerate(chans):
+                    newdata[i+1] = self.countdata[i, -1]
+                self._data_to_save.append(newdata) #stuff newdata into _data_to_save class array
+        return
+
+
+
 
     @QtCore.Slot()
     def start_terascan(self,scantype, scanbounds, scanrate): #added, possibly/probably unecessary - could do straight in gui.
