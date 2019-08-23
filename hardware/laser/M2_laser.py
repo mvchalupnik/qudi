@@ -337,7 +337,7 @@ class M2Laser(Base, M2LaserInterface):
         self.flush()
 
         out = self.get_laser_state()
-        return out['wavelength']
+        return out['wavelength'][0]
 
     #TODO if this works do the same for status, ie. stitching vs scanning
 

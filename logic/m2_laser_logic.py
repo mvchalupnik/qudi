@@ -64,7 +64,10 @@ class M2LaserLogic(CounterLogic):
 
     sigStartScan = QtCore.Signal() #Just added
 
+  ######  wavelength = 0 #JUST ADDED
+
     #############    Adapted from CounterLogic
+    ##TODO get rid of unnecessary signals here
     sigCounterUpdated = QtCore.Signal()
     sigCountDataNext = QtCore.Signal()
     sigGatedCounterFinished = QtCore.Signal()
@@ -121,7 +124,7 @@ class M2LaserLogic(CounterLogic):
         """ Prepare logic module for work.
         """
         self._laser = self.laser()
-        self.stopRequested = False #duplicate
+        self.stopRequest = False #duplicate, no -ed
         self.bufferLength = 100 #?
         self.data = {}
 
@@ -134,7 +137,7 @@ class M2LaserLogic(CounterLogic):
         self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.QueuedConnection)
 
         # get laser capabilities at start (currently not doing anything with laserstate
-        self.laser_state = self._laser.get_laser_state()
+ ###       self.laser_state = self._laser.get_laser_state()
         self.current_wavelength = self._laser.get_wavelength()
 
 
@@ -166,27 +169,21 @@ class M2LaserLogic(CounterLogic):
 
 
     #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
-
+    #This is adapted from original laser_logic
     @QtCore.Slot()
     def check_laser_loop(self):
-        """ Get power, current, shutter state and temperatures from laser. """
-        if self.stopRequested:
+        """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
+        if self.stopRequest: #no -ed
             if self.module_state.can('stop'):
                 self.module_state.stop()
-            self.stopRequested = False
+            self.stopRequest = False #no -ed
             return
         qi = self.queryInterval
         try:
             #print('laserloop', QtCore.QThread.currentThreadId())
-#            self.laser_state = self._laser.get_laser_state() #! look at
-#            self.current_wavelength = self._laser.get_wavelength() #todo uncomment fix
+            self.current_wavelength = self._laser.get_wavelength() #todo uncomment fix
+            pass
 
-            #unused below??
-            for k in self.data:
-                self.data[k] = np.roll(self.data[k], -1)
-
-     #       for k, v in self.laser_temps.items():
-     #           self.data[k][-1] = v
         except:
             qi = 3000
             self.log.exception("Exception in laser status loop, throttling refresh rate.")
@@ -203,9 +200,9 @@ class M2LaserLogic(CounterLogic):
     @QtCore.Slot()
     def stop_query_loop(self):
         """ Stop the readout loop. """
-        self.stopRequested = True
+        self.stopRequest = True #no -ed
         for i in range(10):
-            if not self.stopRequested:
+            if not self.stopRequest: #no -ed
                 return
             QtCore.QCoreApplication.processEvents() #?
             time.sleep(self.queryInterval/1000)
@@ -236,6 +233,7 @@ class M2LaserLogic(CounterLogic):
             print('laser logic module is locked')
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
+
                 if self.stopRequested: #modified -ed
                     # close off the actual counter
                     cnt_err = self._counting_device.close_counter()
@@ -250,34 +248,24 @@ class M2LaserLogic(CounterLogic):
 
                 #TODO: read the current wavelength value here as well, average with below val
 
-
                 # read the current counter value
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
-              #  print('this is rawdata')
-         #       print(self.rawdata)
+
                 #or this way, I can check the wavelength right before and right after I get a count :/
                 #and then average them to assign the "wavelength" the counts were taken at
 
                 #ADDED: read the current wavelength value
                 #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
                 #not sure right now if that's the case. Probably there's a better way to do this.
-                self.wavelengthdata = self._laser.get_terascan_wavelength()
-          #      print(self.wavelengthdata)
-                #redefine another counter_logic func so this gets put into an array and used!
-
-                #alternatively, view confocal or odmr_logic - they also have to tie together another variable with counts
-
-             #   self.rawdata = np.insert(self.rawdata, 0,self.wavelengthdata,0) #add wavelength data to the front of the array
-             #   print(self.rawdata) #watch - rounding errors? ??? probably all elements must be the same type, which is bad for me
-
-             ####   self.xdata =
+                self.current_wavelength = self._laser.get_terascan_wavelength()
+                print(self.current_wavelength)
 
                 if self.rawdata[0, 0] < 0: #counts can't be negative(?)
                     self.log.error('The counting went wrong, killing the counter.')
                     self.stopRequested = True #modified -ed
                 else:
                     if self._counting_mode == CountingMode['CONTINUOUS']:
-                        self._process_data_continous() #TODO overload this
+                        self._process_data_continous()
                     elif self._counting_mode == CountingMode['GATED']:
                         self._process_data_gated()
                     elif self._counting_mode == CountingMode['FINITE_GATED']:
@@ -288,6 +276,12 @@ class M2LaserLogic(CounterLogic):
             # call this again from event loop
             self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI
             self.sigCountDataNext.emit() #this is connected to count_loop_body, so will call this func again
+
+
+            ##Careful: below may slow scan down?
+            #Ideally this would be running in parallel???? but maybe not possible given we access and write to
+            #the wavelength data with the two different processes
+            self.sigUpdate.emit()
         return
 
 
@@ -297,19 +291,10 @@ class M2LaserLogic(CounterLogic):
         Processes the raw data from the counting device
         @return:
         """
-  #      for i, ch in enumerate(self.get_channels()): #there should not be more than 1 input channel for data... fixme
-  #          # remember the new count data in circular array #?
-  #          print('debugging HERE')
-  #          print(i)
-  #          print(ch)
-  #          print(self.countdata[i,0])
-  #          print(self.rawdata[i])
-  #          print(np.average(self.rawdata[i]))
-  #          print('was debugging')
-  #          self.countdata[i, 0] = np.average(self.rawdata[i]) #?????
 
-        self.countdata[0, 0] = np.average(self.wavelengthdata)  # ?????
-        self.countdata[1, 0] = np.average(self.rawdata[0])  #
+        self.countdata[0, 0] = np.average(self.current_wavelength)
+        self.countdata[1, 0] = np.average(self.rawdata[0])
+
 
         # move the array to the left to make space for the new data
         self.countdata = np.roll(self.countdata, -1, axis=1) #Not sure if roll is what we want here

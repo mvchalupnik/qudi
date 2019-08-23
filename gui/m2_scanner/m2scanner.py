@@ -82,7 +82,8 @@ class M2ScannerGUI(GUIBase):
 
         #set up GUI
         self._mw.scanType_comboBox.setInsertPolicy = 6  # InsertAlphabetically
-        self._mw.scanType_comboBox.addItems({"Fine","Medium"})
+        self._mw.scanType_comboBox.addItem("Fine")
+        self._mw.scanType_comboBox.addItem("Medium")
 
         self._mw.scanRate_comboBox.setInsertPolicy = 6 #InsertAlphabetically
         for x in range(0, 14):
@@ -124,13 +125,12 @@ class M2ScannerGUI(GUIBase):
         self._plot_item.getAxis('top').linkToView(self._top_axis)
         self._top_axis.setYLink(self._plot_item)
         self._top_axis.invertX(b=True)
-    #
-    #     # handle resizing of any of the elements
-    #
-    #     self._pw.setLabel('left', 'Fluorescence', units='counts/s')
-    #     self._pw.setLabel('right', 'Number of Points', units='#')
-    #     self._pw.setLabel('bottom', 'Wavelength', units='m')
-    #     self._pw.setLabel('top', 'Relative Frequency', units='Hz')
+
+
+        self._pw.setLabel('left', 'Count Rate', units='counts/s')
+  ##      self._pw.setLabel('right', 'Counts', units='#') #TODO get rid of or implement
+        self._pw.setLabel('bottom', 'Wavelength', units='nm')
+  ##      self._pw.setLabel('top', 'Relative Frequency', units='Hz') #TODO implement
     #
          # Create an empty plot curve to be filled later, set its pen
         self._curve1 = self._pw.plot()
@@ -417,26 +417,15 @@ class M2ScannerGUI(GUIBase):
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
-        #self._mw.currentLabel.setText(
-        #    '{0:6.3f} {1}'.format(
-        #        self._laser_logic.laser_current,
-        #        self._laser_logic.laser_current_unit))
-        #self._mw.powerLabel.setText('{0:6.3f} W'.format(self._laser_logic.laser_power))
-        #self._mw.extraLabel.setText(self._laser_logic.laser_extra)
 
         #TODO throw error if startwavelength > stopwavlength
         #OR? do this in update_calcualated_scan_params???
         #TODO don't throw an error, but just don't allow the action to occur (eg don't update gui and laser to reflect it)
 
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
+
 #        self.updateButtonsEnabled()
 
-      #  print('inside updateGui')
-     #   print(self._laser_logic.current_wavelength)
-
-        #TODO use for plot?
-        #for name, curve in self.curves.items():
-        #    curve.setData(x=self._laser_logic.data['time'], y=self._laser_logic.data[name])
 
     def start_clicked(self):
         """ Handling the Start button to stop and restart the counter.
@@ -447,7 +436,6 @@ class M2ScannerGUI(GUIBase):
 
         else:
             self._mw.run_scan_Action.setText('Stop counter')
-            self.sigStartCounter.emit()
 
             # Adding:
             startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
@@ -455,6 +443,11 @@ class M2ScannerGUI(GUIBase):
             #            self._laser_logic.setup_terascan(scantype,(startWvln, stopWvln), scanrate)
             #            self._laser_logic.start_terascan(scantype)
 
-            self._laser_logic.start_terascan("medium", (750, 751), 10E9)
+            ####JUST ADDED
+            self._laser_logic.stop_query_loop() #careful with this todo look at
+
+            self._laser_logic.start_terascan("medium", (750, 751), 10E9) #start terascan
+
+            self.sigStartCounter.emit() #start counter, if you follow it long enough it connects to count_loop_body in m2_laser_logic
 
         return self._laser_logic.module_state()
