@@ -230,7 +230,6 @@ class M2LaserLogic(CounterLogic):
         #todo figure out which is best
         print('count_loop_body runs')
         if self.module_state() == 'locked': #
-            print('laser logic module is locked')
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
 
@@ -242,8 +241,10 @@ class M2LaserLogic(CounterLogic):
                         self.log.error('Could not even close the hardware, giving up.')
                     # switch the state variable off again
                     self.stopRequested = False #modified -ed
-                    self.module_state.unlock()
+                    self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan! TODO
                     self.sigCounterUpdated.emit()
+
+
                     return
 
                 #TODO: read the current wavelength value here as well, average with below val
@@ -258,6 +259,12 @@ class M2LaserLogic(CounterLogic):
                 #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
                 #not sure right now if that's the case. Probably there's a better way to do this.
                 self.current_wavelength = self._laser.get_terascan_wavelength()
+                if self.current_wavelength == -1: #timeout in get_terascan_wavelength()
+                    ###self.stopRequested = True
+                    self.module_state.unlock()
+                    self.queryTimer.timeout.emit()
+                    #should run self.check_laser_loop() #start wavelength non-scan query loop back
+                    return
                 print(self.current_wavelength)
 
                 if self.rawdata[0, 0] < 0: #counts can't be negative(?)

@@ -431,10 +431,16 @@ class M2ScannerGUI(GUIBase):
         """ Handling the Start button to stop and restart the counter.
         """
         if self._laser_logic.module_state() == 'locked':
+            print('STOP TERASCAN')
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
 
+            #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+            self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
+            self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
+
         else:
+            print('START TERASCAN')
             self._mw.run_scan_Action.setText('Stop counter')
 
             # Adding:
