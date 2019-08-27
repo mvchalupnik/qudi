@@ -24,19 +24,6 @@ import abc
 from core.util.interfaces import InterfaceMetaclass
 
 
-##TODO: delete or use Enums below
-class ShutterState(Enum):
-    CLOSED = 0
-    OPEN = 1
-    UNKNOWN = 2
-    NOSHUTTER = 3
-
-class LaserState(Enum):
-    OFF = 0
-    ON = 1
-    LOCKED = 2
-    UNKNOWN = 3
-
 class M2LaserInterface(metaclass=InterfaceMetaclass):
     _modtype = 'M2LaserInterface'
     _modclass = 'interface'
