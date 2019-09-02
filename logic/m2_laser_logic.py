@@ -346,3 +346,69 @@ class M2LaserLogic(CounterLogic):
         self._laser.start_terascan(scantype)
 
         return
+
+#From logic/spectrum.py
+    def save_spectrum_data(self, background=False, name_tag='', custom_header=None):
+        """ Saves the current spectrum data to a file.
+
+        @param bool background: Whether this is a background spectrum (dark field) or not.
+
+        @param string name_tag: postfix name tag for saved filename.
+
+        @param OrderedDict custom_header:
+            This ordered dictionary is added to the default data file header. It allows arbitrary
+            additional experimental information to be included in the saved data file header.
+        """
+        filepath = self._save_logic.get_path_for_module(module_name='spectra')
+        if background:
+            filelabel = 'background'
+            spectrum_data = self._spectrum_background
+        else:
+            filelabel = 'spectrum'
+            spectrum_data = self._spectrum_data
+
+        # Add name_tag as postfix to filename
+        if name_tag != '':
+            filelabel = filelabel + '_' + name_tag
+
+        # write experimental parameters
+        parameters = OrderedDict()
+        parameters['Spectrometer acquisition repetitions'] = self.repetition_count
+
+        # add all fit parameter to the saved data:
+        if self.fc.current_fit_result is not None:
+            parameters['Fit function'] = self.fc.current_fit
+
+            for name, param in self.fc.current_fit_param.items():
+                parameters[name] = str(param)
+
+        # add any custom header params
+        if custom_header is not None:
+            for key in custom_header:
+                parameters[key] = custom_header[key]
+
+        # prepare the data in an OrderedDict:
+        data = OrderedDict()
+
+        data['wavelength'] = spectrum_data[0, :]
+
+        # If the differential spectra arrays are not empty, save them as raw data
+        if len(self.diff_spec_data_mod_on) != 0 and len(self.diff_spec_data_mod_off) != 0:
+            data['signal_mod_on'] = self.diff_spec_data_mod_on[1, :]
+            data['signal_mod_off'] = self.diff_spec_data_mod_off[1, :]
+            data['differential'] = spectrum_data[1, :]
+        else:
+            data['signal'] = spectrum_data[1, :]
+
+        if not background and len(self._spectrum_data_corrected) != 0:
+            data['corrected'] = self._spectrum_data_corrected[1, :]
+
+        fig = self.draw_figure()
+
+        # Save to file
+        self._save_logic.save_data(data,
+                                   filepath=filepath,
+                                   parameters=parameters,
+                                   filelabel=filelabel,
+                                   plotfig=fig)
+        self.log.debug('Spectrum saved to:\n{0}'.format(filepath))

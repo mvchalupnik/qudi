@@ -75,9 +75,10 @@ class M2ScannerGUI(GUIBase):
         #Connect to laser_logic to GUI action
         self._laser_logic.sigUpdate.connect(self.updateGui)
 
-        #connect GUI signals to laser logic action
-        self.sigStartCounter.connect(self._laser_logic.startCount)
-        self.sigStopCounter.connect(self._laser_logic.stopCount)
+    #duplicate below?
+    #    #connect GUI signals to laser logic action
+    #    self.sigStartCounter.connect(self._laser_logic.startCount)
+    #    self.sigStopCounter.connect(self._laser_logic.stopCount)
 
 
         #set up GUI
@@ -92,8 +93,6 @@ class M2ScannerGUI(GUIBase):
 
         #####################
         # Connecting user interactions
-        self._mw.run_scan_Action.triggered.connect(self.start_clicked)
- #       self._mw.save_scan_Action.triggered.connect(self.save_clicked)
 
         self._mw.scanType_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.scanRate_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
@@ -135,32 +134,24 @@ class M2ScannerGUI(GUIBase):
          # Create an empty plot curve to be filled later, set its pen
         self._curve1 = self._pw.plot()
         self._curve1.setPen(palette.c1, width=2)
-    #
-    #     self._curve2 = self._pw.plot()
-    #     self._curve2.setPen(palette.c2, width=2)
-    #
-        self.update_data()
-    #
-    #     # Connect singals
-    #     self._mw.rec_single_spectrum_Action.triggered.connect(self.record_single_spectrum)
-    #     self._mw.start_diff_spec_Action.triggered.connect(self.start_differential_measurement)
-    #     self._mw.stop_diff_spec_Action.triggered.connect(self.stop_differential_measurement)
-    #     self._mw.resume_diff_spec_Action.triggered.connect(self.resume_differential_measurement)
-    #
-    #     self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
-    #     self._mw.correct_background_Action.triggered.connect(self.correct_background)
-    #     self._mw.acquire_background_Action.triggered.connect(self.acquire_background)
-    #     self._mw.save_background_Action.triggered.connect(self.save_background_data)
-    #
-    #     self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
-    #
 
-    #
-        self._mw.show()
-    #
+        self.update_data()
+
+
+
+        # Connect singals
+        self._mw.run_scan_Action.triggered.connect(self.start_clicked)  # start_clicked then triggers sigStartCounter
+        #       self._mw.save_scan_Action.triggered.connect(self.save_clicked) #there is no save_clicked function
+
+        #self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
+
+  #      self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
+
+
+
         #FROM countergui.py
         #####################
-        # starting the physical measurement
+        # Connect signals for counter
         self.sigStartCounter.connect(self._laser_logic.startCount)
         self.sigStopCounter.connect(self._laser_logic.stopCount)
 
@@ -168,6 +159,9 @@ class M2ScannerGUI(GUIBase):
         # Handling signals from the logic
 
         self._laser_logic.sigCounterUpdated.connect(self.update_data)
+
+        #show the main gui
+        self._mw.show()
 
     def on_deactivate(self):
         """ Deinitialisation performed during deactivation of the module.
@@ -252,121 +246,9 @@ class M2ScannerGUI(GUIBase):
 
 
 
+    def save_spectrum_data(self):
+        self._spectrum_logic.save_spectrum_data()
 
-
-
-
-
-
-    # def update_fit(self, fit_data, result_str_dict, current_fit):
-    #     """ Update the drawn fit curve and displayed fit results.
-    #     """
-    #     if current_fit != 'No Fit':
-    #         # display results as formatted text
-    #         self._mw.spectrum_fit_results_DisplayWidget.clear()
-    #         try:
-    #             formated_results = units.create_formatted_output(result_str_dict)
-    #         except:
-    #             formated_results = 'this fit does not return formatted results'
-    #         self._mw.spectrum_fit_results_DisplayWidget.setPlainText(formated_results)
-    #
-    #         # redraw the fit curve in the GUI plot.
-    #         self._curve2.setData(x=fit_data[0, :], y=fit_data[1, :])
-    #
-    # def record_single_spectrum(self):
-    #     """ Handle resume of the scanning without resetting the data.
-    #     """
-    #     self._spectrum_logic.get_single_spectrum()
-    #
-    # def start_differential_measurement(self):
-    #
-    #     # Change enabling of GUI actions
-    #     self._mw.stop_diff_spec_Action.setEnabled(True)
-    #     self._mw.start_diff_spec_Action.setEnabled(False)
-    #     self._mw.rec_single_spectrum_Action.setEnabled(False)
-    #     self._mw.resume_diff_spec_Action.setEnabled(False)
-    #
-    #     self._spectrum_logic.start_differential_spectrum()
-    #
-    # def stop_differential_measurement(self):
-    #     self._spectrum_logic.stop_differential_spectrum()
-    #
-    #     # Change enabling of GUI actions
-    #     self._mw.stop_diff_spec_Action.setEnabled(False)
-    #     self._mw.start_diff_spec_Action.setEnabled(True)
-    #     self._mw.rec_single_spectrum_Action.setEnabled(True)
-    #     self._mw.resume_diff_spec_Action.setEnabled(True)
-    #
-    # def resume_differential_measurement(self):
-    #     self._spectrum_logic.resume_differential_spectrum()
-    #
-    #     # Change enabling of GUI actions
-    #     self._mw.stop_diff_spec_Action.setEnabled(True)
-    #     self._mw.start_diff_spec_Action.setEnabled(False)
-    #     self._mw.rec_single_spectrum_Action.setEnabled(False)
-    #     self._mw.resume_diff_spec_Action.setEnabled(False)
-    #
-    # def save_spectrum_data(self):
-    #     self._spectrum_logic.save_spectrum_data()
-    #
-    # def correct_background(self):
-    #     self._spectrum_logic.background_correction = self._mw.correct_background_Action.isChecked()
-    #
-    # def acquire_background(self):
-    #     self._spectrum_logic.get_single_spectrum(background=True)
-    #
-    # def save_background_data(self):
-    #     self._spectrum_logic.save_spectrum_data(background=True)
-    #
-    # def do_fit(self):
-    #     """ Command spectrum logic to do the fit with the chosen fit function.
-    #     """
-    #     fit_function = self._mw.fit_methods_ComboBox.getCurrentFit()[0]
-    #     self._spectrum_logic.do_fit(fit_function)
-    #
-    # def set_fit_domain(self):
-    #     """ Set the fit domain in the spectrum logic to values given by the GUI spinboxes.
-    #     """
-    #     lambda_min = self._mw.fit_domain_min_doubleSpinBox.value()
-    #     lambda_max = self._mw.fit_domain_max_doubleSpinBox.value()
-    #
-    #     new_fit_domain = np.array([lambda_min, lambda_max])
-    #
-    #     self._spectrum_logic.set_fit_domain(new_fit_domain)
-    #
-    # def reset_fit_domain_all_data(self):
-    #     """ Reset the fit domain to match the full data set.
-    #     """
-    #     self._spectrum_logic.set_fit_domain()
-    #
-    # def update_fit_domain(self, domain):
-    #     """ Update the displayed fit domain to new values (set elsewhere).
-    #     """
-    #     self._mw.fit_domain_min_doubleSpinBox.setValue(domain[0])
-    #     self._mw.fit_domain_max_doubleSpinBox.setValue(domain[1])
-    #
-    # def restore_default_view(self):
-    #     """ Restore the arrangement of DockWidgets to the default
-    #     """
-    #     # Show any hidden dock widgets
-    #     self._mw.spectrum_fit_dockWidget.show()
-    #
-    #     # re-dock any floating dock widgets
-    #     self._mw.spectrum_fit_dockWidget.setFloating(False)
-    #
-    #     # Arrange docks widgets
-    #     self._mw.addDockWidget(QtCore.Qt.DockWidgetArea(QtCore.Qt.TopDockWidgetArea),
-    #                            self._mw.spectrum_fit_dockWidget
-    #                            )
-    #
-    #     # Set the toolbar to its initial top area
-    #     self._mw.addToolBar(QtCore.Qt.TopToolBarArea,
-    #                         self._mw.measure_ToolBar)
-    #     self._mw.addToolBar(QtCore.Qt.TopToolBarArea,
-    #                         self._mw.background_ToolBar)
-    #     self._mw.addToolBar(QtCore.Qt.TopToolBarArea,
-    #                         self._mw.differential_ToolBar)
-    #     return 0
 
     #wavemeter gui did not use QtCore.Slots (??)
 
@@ -396,6 +278,10 @@ class M2ScannerGUI(GUIBase):
         startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
 
 
+        #Do not allow stopWvln >= startWvln
+      #  if startWvln >= stopWvln:
+
+
         midWvln = (stopWvln + startWvln)/2 #in m
         rangeWvln = (stopWvln - startWvln) #in m
 
@@ -417,19 +303,15 @@ class M2ScannerGUI(GUIBase):
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
-
-        #TODO throw error if startwavelength > stopwavlength
-        #OR? do this in update_calcualated_scan_params???
-        #TODO don't throw an error, but just don't allow the action to occur (eg don't update gui and laser to reflect it)
-
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
 
 #        self.updateButtonsEnabled()
 
 
-    def start_clicked(self):
+    def start_clicked(self): #todo: move the logic elements of this function to the logic module
         """ Handling the Start button to stop and restart the counter.
         """
+
         if self._laser_logic.module_state() == 'locked':
             print('STOP TERASCAN')
             self._mw.run_scan_Action.setText('Start counter')
@@ -445,6 +327,13 @@ class M2ScannerGUI(GUIBase):
 
             # Adding:
             startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+
+            # Check for input parameter errors. E.G., stop_wavelength should be less than start_wavelength
+            if startWvln >= stopWvln:
+                error_dialog = QtWidgets.QErrorMessage()
+                error_dialog.showMessage('ERROR: start wavelength must be less than stop wavelength')
+                #not currently working? todo fix
+                return self._laser_logic.module_state()
 
             #            self._laser_logic.setup_terascan(scantype,(startWvln, stopWvln), scanrate)
             #            self._laser_logic.start_terascan(scantype)
