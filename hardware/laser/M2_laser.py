@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 This module controls an M squared laser
-Written by Graham Joe, M. Chalupnik
-
+Originally taken from:
+https://github.com/AlexShkarin/pyLabLib/blob/master/pylablib/aux_libs/devices/M2.py (I think)
+Modifications by Graham Joe, M. Chalupnik
 """
 
 from core.module import Base, ConfigOption
@@ -151,6 +152,7 @@ class M2Laser(Base, M2LaserInterface):
         self.set_timeout(5) #Probably should not be hardcoded
         try:
             report = self.socket.recv(bits)
+            #if bits, recv(bits), else report = self.socket.recv_all()?
         except:
             return -1
         return report
@@ -301,7 +303,7 @@ class M2Laser(Base, M2LaserInterface):
             pass
             #self.log.warning("can't tune wavelength: {}nm is out of range".format(wavelength * 1E9))
         if sync:
-            return self.wait_for_report('set_wav_m', timeout=timeout)
+            return self.wait_for_report('set_wave_m', timeout=timeout)
 
     def check_tuning_report(self):
         """Check wavelength fine-tuning report
