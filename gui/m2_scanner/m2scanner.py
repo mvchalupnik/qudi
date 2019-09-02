@@ -66,6 +66,8 @@ class M2ScannerGUI(GUIBase):
         """ Definition and initialisation of the GUI.
         """
 
+        print('on_activate called in m2scanner.py')
+
         self._laser_logic = self.laserlogic()
 
         # setting up the window
@@ -166,12 +168,25 @@ class M2ScannerGUI(GUIBase):
     def on_deactivate(self):
         """ Deinitialisation performed during deactivation of the module.
         """
-        # disconnect signals
+        # disconnect signals #I think this will be unnecessary given that only the gui,
+        #not hardware or logic modules will deactivate when deactivate button is pressed
+        #(modeled after previously existing Laser module)
 #        self._fsd.sigFitsUpdated.disconnect()
+
         print('in gui trying to deactivate')
         self._mw.close()
-#        self._laser_logic.on_deactivate() #problem when gui is closed, it's not actually deactivating :(
-#        self._laser_logic._laser.on_deactivate()
+
+        #if a terascan is running, stop the terascan before deactivating
+        if self._laser_logic.module_state() == 'locked':
+            print('STOP TERASCAN')
+            self._mw.run_scan_Action.setText('Start counter')
+            self.sigStopCounter.emit()
+
+            #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+            self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
+            self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
+
+
 
     def show(self):
         """Make window visible and put it above all other windows.
@@ -313,6 +328,7 @@ class M2ScannerGUI(GUIBase):
         """
 
         if self._laser_logic.module_state() == 'locked':
+
             print('STOP TERASCAN')
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
@@ -320,7 +336,6 @@ class M2ScannerGUI(GUIBase):
             #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
             self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
             self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
-
         else:
             print('START TERASCAN')
             self._mw.run_scan_Action.setText('Stop counter')
@@ -332,8 +347,10 @@ class M2ScannerGUI(GUIBase):
             if startWvln >= stopWvln:
                 error_dialog = QtWidgets.QErrorMessage()
                 error_dialog.showMessage('ERROR: start wavelength must be less than stop wavelength')
-                #not currently working? todo fix
+                error_dialog.exec()
                 return self._laser_logic.module_state()
+
+
 
             #            self._laser_logic.setup_terascan(scantype,(startWvln, stopWvln), scanrate)
             #            self._laser_logic.start_terascan(scantype)

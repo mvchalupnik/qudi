@@ -94,7 +94,7 @@ class M2LaserLogic(CounterLogic):
     def on_activate(self):
         ############## Counter related on_activate tasks:
         # Connect to hardware and save logic
-        print('on_activate is called')
+        print('on_activate is called in m2_laser_logic')
         self._counting_device = self.counter1()
        #### self._save_logic = self.savelogic()
 
@@ -166,6 +166,7 @@ class M2LaserLogic(CounterLogic):
         for i in range(5):
             time.sleep(self.queryInterval / 1000)
             QtCore.QCoreApplication.processEvents()
+
 
 
     #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
