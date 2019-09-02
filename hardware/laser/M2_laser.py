@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 This module controls an M squared laser
-Written by Graham Joe, M. Chalupnik
-
+Originally taken from:
+https://github.com/AlexShkarin/pyLabLib/blob/master/pylablib/aux_libs/devices/M2.py (I think)
+Modifications by Graham Joe, M. Chalupnik
 """
 
 from core.module import Base, ConfigOption
@@ -18,8 +19,8 @@ import json
 import websocket
 
 
-class M2Laser(Base, M2LaserInterface):
-#class M2Laser(): #for debugging
+#class M2Laser(Base, M2LaserInterface):
+class M2Laser(): #for debugging
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -49,7 +50,7 @@ class M2Laser(Base, M2LaserInterface):
     def on_activate(self):
         """ Initialization performed during activation of the module (like in e.g. mw_source_dummy.py)
         """
-
+        print('on_activate is called in M2_laser hardware')
         self.address = (self._ip, self._port)
         self.timeout = self._timeout
         self.transmission_id = 1
@@ -67,7 +68,10 @@ class M2Laser(Base, M2LaserInterface):
                                     #which is trying to create a websocket connection which is trying to _open_socket
                                     #but instead I get WinError 10061 No connection could be made because the target machien
                                     #actively refused it
+        #TODO if terascan is going, cancel terascan!
+        print('about to try to disocnnect laser')
         self.disconnect_laser()
+        print('succeeded in disconnecting laser')
 
     def connect_laser(self):
         """ Connect to Instrument.
@@ -96,7 +100,7 @@ class M2Laser(Base, M2LaserInterface):
         self.timeout = timeout
         self.socket.settimeout(timeout)
 
-    def send(self, op, parameters, transmission_id=None): #LOOK AT
+    def send(self, op, parameters, transmission_id=None):
         """ Send json message to laser
 
         :param op: operation to be performed
@@ -105,11 +109,18 @@ class M2Laser(Base, M2LaserInterface):
         :return: reply operation dictionary, reply parameters dictionary
         """
         message = self._build_message(op, parameters, transmission_id)
+        print('trying to send message')
         self.socket.sendall(message.encode('utf-8'))
-        reply = self.socket.recv(self.buffersize)
+        print('MESSAGE WAS SENT')
+        #reply = self.socket.recv(self.buffersize)
+        reply = self.flush()#added 9/2/19
+        print('this is reply')
+        print(reply)
+        print('that was reply')
         #self.log(reply)
         op_reply, parameters_reply = self._parse_reply(reply)
         self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1]
+        print('end of send reached')
         return op_reply, parameters_reply
 
     def set(self, setting, value, key_name='setting'): #LOOK AT
@@ -150,7 +161,10 @@ class M2Laser(Base, M2LaserInterface):
 
         self.set_timeout(5) #Probably should not be hardcoded
         try:
-            report = self.socket.recv(bits)
+            if bits:
+                report = self.socket.recv(bits)
+            else:
+                report = self.socket.recv_all()
         except:
             return -1
         return report
@@ -164,6 +178,9 @@ class M2Laser(Base, M2LaserInterface):
         except:
             pass
             # self.log.warning("received reply while waiting for a report: '{}'".format(report[0]))
+        print('update_reports was called!')
+        print(self.socket.gettimeout())
+        print(self.timeout)
         self.socket.settimeout(self.timeout)
 
     def get_last_report(self, op):
@@ -187,16 +204,19 @@ class M2Laser(Base, M2LaserInterface):
         """
         self.socket.settimeout(timeout) #modified
         while True:
-            report = self.socket.recv(10000)
+            report = self.socket.recv(10000) #TODO fix bad style
             op_reports, parameters_reports = self._parse_reply(report)
             for op_report, parameters_report in zip(op_reports, parameters_reports):
                 print(op_report)
                 print(parameters_report)
+                print('inside wait_for_report')
+                print(op)
 
                 if not self._is_report_op(op_report):
-                    pass
+                    print('not correct report')
                     #self.log.warning("received reply while waiting for a report")
                 if op_report == self._make_report_op(op):
+                    print('was correct report')
                     return parameters_report
 
 
@@ -301,7 +321,7 @@ class M2Laser(Base, M2LaserInterface):
             pass
             #self.log.warning("can't tune wavelength: {}nm is out of range".format(wavelength * 1E9))
         if sync:
-            return self.wait_for_report('set_wav_m', timeout=timeout)
+            return self.wait_for_report('set_wave_m', timeout=timeout) #FIXED CRITICAL ERROR
 
     def check_tuning_report(self):
         """Check wavelength fine-tuning report
@@ -493,6 +513,10 @@ class M2Laser(Base, M2LaserInterface):
         self._check_terascan_type(scan_type)
         if sync:
             self.enable_terascan_updates()
+
+       #JUST ADDED
+        self.send("scan_stitch_output", {"operation": "stop", "update": 0})  # NOT SURE IF THIS WILL HELp
+
         _, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "start", "report": "finished"})
         if reply[-1]["status"][0] == 1:
             pass
@@ -502,8 +526,8 @@ class M2Laser(Base, M2LaserInterface):
             #self.log.warning("can't start TeraScan: TeraScan not available")
 #        print(reply)
 
-        if sync:
-            self.wait_for_terascan_update()
+##        if sync:
+ ##           self.wait_for_terascan_update()
 #        if sync_done:
 #            self.wait_for_report("scan_stitch_op") #Prints to command line, also returns the same thing
 
@@ -546,7 +570,7 @@ class M2Laser(Base, M2LaserInterface):
         
         :return dict: Terascan report
         """
-        self.wait_for_report(self._terascan_update_op)
+        self.wait_for_report(self._terascan_update_op) #waits for wavelength report
         return self.check_terascan_update()
 
     def check_terascan_report(self):
@@ -566,7 +590,12 @@ class M2Laser(Base, M2LaserInterface):
         :param sync_done bool: wait until the scan stop is complete.
         """
         self._check_terascan_type(scan_type)
+ ##       #adding below
+        self.flush()
+        self.send("scan_stitch_output", {"operation":"stop", "update":0}) #NOT SURE IF THIS WILL HELp
+        self.flush() #TODO remove this line, does not seem to hlep
         _, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
+        self.flush()
         print(reply)
   #      if reply[-1]["status"][0] == 1:
   #          pass
@@ -578,8 +607,14 @@ class M2Laser(Base, M2LaserInterface):
             ready = 0
             while ready != -1:
                 ready = self.flush()
+                ##print(ready)
             self.on_activate()
-            ##self.wait_for_report("scan_stitch_op")
+
+  #      self.flush()    #was commented
+  #      self.wait_for_report("scan_stitch_op") #Do not wait for a report, since the constant
+                                        #output of this fnc into our buffer and deletion of
+                                        #data on edges of buffer means we are likely to miss the
+                                        #report
 
     _web_scan_status_str = ['off', 'cont', 'single', 'flyback', 'on', 'fail']
 
@@ -1000,3 +1035,12 @@ class M2Laser(Base, M2LaserInterface):
             #self.log.warning("unknown fast scan type: {}".format(scan_type))
 
 
+#websocket connection *may* be faster??
+#also seems to require different JSON formatting? (based on SolsTis javascript
+# in their laser control web-based gui)
+#e.g.
+#{"message_type":"task_request", "task":["job_medium_scan_start"]}
+#for start medium terascan
+#a web connection might be better? In order to stop_terascan more quickly?
+#I should put this problem to the side since it's not urgent, however
+#in the future we may want to look into switching to a web socket
