@@ -40,7 +40,7 @@ class M2ControllerWindow(QtWidgets.QMainWindow):
         """
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'ui_m2scanner.ui') #modified
+        ui_file = os.path.join(this_dir, 'ui_m2scanner_new2.ui') #modified
 
         # Load it
         super().__init__()
@@ -66,24 +66,39 @@ class M2ScannerGUI(GUIBase):
         """ Definition and initialisation of the GUI.
         """
 
-        print('on_activate called in m2scanner.py')
-
+        #Connect to laser_logic
         self._laser_logic = self.laserlogic()
 
         # setting up the window
         self._mw = M2ControllerWindow()
 
 
-        #Connect to laser_logic to GUI action
+        ###################
+        # Connect Signals
+        ###################
+
+        self._mw.run_scan_Action.triggered.connect(self.start_clicked)  # start_clicked then triggers sigStartCounter
+
+        #       self._mw.save_scan_Action.triggered.connect(self.save_clicked) #there is no save_clicked function
+        # self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
+        #      self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
+
+        # FROM countergui.py
+        # Connect signals for counter
+        self.sigStartCounter.connect(self._laser_logic.startCount)
+        self.sigStopCounter.connect(self._laser_logic.stopCount)
+
+        # Handling signals from the logic
+        #   signals during terascan
+        self._laser_logic.sigCounterUpdated.connect(self.update_data)
+        #   signals not during terascans
         self._laser_logic.sigUpdate.connect(self.updateGui)
 
-    #duplicate below?
-    #    #connect GUI signals to laser logic action
-    #    self.sigStartCounter.connect(self._laser_logic.startCount)
-    #    self.sigStopCounter.connect(self._laser_logic.stopCount)
 
-
+        ####################
         #set up GUI
+        ####################
+
         self._mw.scanType_comboBox.setInsertPolicy = 6  # InsertAlphabetically
         self._mw.scanType_comboBox.addItem("Fine")
         self._mw.scanType_comboBox.addItem("Medium")
@@ -93,23 +108,19 @@ class M2ScannerGUI(GUIBase):
             self._mw.scanRate_comboBox.addItem(str(x))
 
 
+
         #####################
         # Connecting user interactions
+        ########################
 
         self._mw.scanType_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.scanRate_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.startWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
         self._mw.stopWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
 
-        self.update_calculated_scan_params() #initialize
 
-
-    #    self._mw.stop_diff_spec_Action.setEnabled(False)
-    #    self._mw.resume_diff_spec_Action.setEnabled(False)
-    #    self._mw.correct_background_Action.setChecked(self._spectrum_logic.background_correction)
-
-        # giving the plots names allows us to link their axes together
-        self._pw = self._mw.plotWidget  # pg.PlotWidget(name='Counter1')
+        #below from countergui.py
+        self._pw = self._mw.plotWidget
         self._plot_item = self._pw.plotItem
 
         # create a new ViewBox, link the right axis to its coordinate system
@@ -129,38 +140,24 @@ class M2ScannerGUI(GUIBase):
 
 
         self._pw.setLabel('left', 'Count Rate', units='counts/s')
-  ##      self._pw.setLabel('right', 'Counts', units='#') #TODO get rid of or implement
+        ##self._pw.setLabel('right', 'Counts', units='#') #TODO get rid of or implement
         self._pw.setLabel('bottom', 'Wavelength', units='nm')
-  ##      self._pw.setLabel('top', 'Relative Frequency', units='Hz') #TODO implement
-    #
+        ##self._pw.setLabel('top', 'Relative Frequency', units='Hz') #TODO implement
+
          # Create an empty plot curve to be filled later, set its pen
-        self._curve1 = self._pw.plot()
-        self._curve1.setPen(palette.c1, width=2)
+        #self._curve1 = self._pw.plot()
+        #self._curve1.setPen(palette.c1, width=2)
 
-        self.update_data()
+        self._curve1 = pg.PlotDataItem(
+                pen=pg.mkPen(palette.c3, style=QtCore.Qt.DotLine),
+                symbol='s',
+                symbolPen=palette.c3,
+                symbolBrush=palette.c3,
+                symbolSize=5)
+        self._pw.addItem(self._curve1)
 
-
-
-        # Connect singals
-        self._mw.run_scan_Action.triggered.connect(self.start_clicked)  # start_clicked then triggers sigStartCounter
-        #       self._mw.save_scan_Action.triggered.connect(self.save_clicked) #there is no save_clicked function
-
-        #self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
-
-  #      self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
-
-
-
-        #FROM countergui.py
-        #####################
-        # Connect signals for counter
-        self.sigStartCounter.connect(self._laser_logic.startCount)
-        self.sigStopCounter.connect(self._laser_logic.stopCount)
-
-        ##################
-        # Handling signals from the logic
-
-        self._laser_logic.sigCounterUpdated.connect(self.update_data)
+        #initialize starting values
+        self.update_calculated_scan_params()  # initialize
 
         #show the main gui
         self._mw.show()
@@ -178,7 +175,7 @@ class M2ScannerGUI(GUIBase):
 
         #if a terascan is running, stop the terascan before deactivating
         if self._laser_logic.module_state() == 'locked':
-            print('STOP TERASCAN')
+            print('Terascan is running. Trying to stop now!')
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
 
@@ -196,13 +193,13 @@ class M2ScannerGUI(GUIBase):
         self._mw.raise_()
 
     def update_data(self):
-        """ The function that grabs the data and sends it to the plot.
+        """ The function that grabs the terascan count data and sends it to the plot.
         """
         ################ Adapted from spectrometer gui
         data = self._laser_logic.countdata
 
         #Don't plot initialization 0's
-        mask = (data==0).all(0) #returns array of booleans
+        mask = (data==0).all(0)
         start_idx = np.argmax(~mask)
         data = data[:,start_idx:]
 
@@ -211,37 +208,7 @@ class M2ScannerGUI(GUIBase):
             self._curve1.setData(x=data[0, :], y=data[1, :])
 
 
-        ##########From countergui:
-
-        # if self._counting_logic.module_state() == 'locked':
-        #     if 0 < self._counting_logic.countdata_smoothed[(self._display_trace-1), -1] < 10:
-        #         self._mw.count_value_Label.setText(
-        #             '{0:,.6f}'.format(self._counting_logic.countdata_smoothed[(self._display_trace-1), -1]))
-        #     else:
-        #         self._mw.count_value_Label.setText(
-        #             '{0:,.0f}'.format(self._counting_logic.countdata_smoothed[(self._display_trace-1), -1]))
-        #
-        #     x_vals = (
-        #         np.arange(0, self._counting_logic.get_count_length())
-        #         / self._counting_logic.get_count_frequency())
-        #
-        #     ymax = -1
-        #     ymin = 2000000000
-        #     for i, ch in enumerate(self._counting_logic.get_channels()):
-        #         self.curves[2 * i].setData(y=self._counting_logic.countdata[i], x=x_vals)
-        #         self.curves[2 * i + 1].setData(y=self._counting_logic.countdata_smoothed[i],
-        #                                        x=x_vals
-        #                                        )
-        #         if ymax < self._counting_logic.countdata[i].max() and self._trace_selection[i]:
-        #             ymax = self._counting_logic.countdata[i].max()
-        #         if ymin > self._counting_logic.countdata[i].min() and self._trace_selection[i]:
-        #             ymin = self._counting_logic.countdata[i].min()
-        #
-        #     if ymin == ymax:
-        #         ymax += 0.1
-        #     self._pw.setYRange(0.95*ymin, 1.05*ymax)
-        #
-        # if self._counting_logic.get_saving_state():
+      # if self._counting_logic.get_saving_state():
         #     self._mw.record_counts_Action.setText('Save')
         #     self._mw.count_freq_SpinBox.setEnabled(False)
         #     self._mw.oversampling_SpinBox.setEnabled(False)
@@ -260,42 +227,43 @@ class M2ScannerGUI(GUIBase):
 
 
 
-
     def save_spectrum_data(self):
         self._spectrum_logic.save_spectrum_data()
 
 
-    #wavemeter gui did not use QtCore.Slots (??)
-
     def get_scan_info(self):
-        finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001]  # in GHz/s #TODO: Move?
-        mediumrates = [100, 50, 20, 15, 10, 5, 2, 1]  # in GHz/s #TODO: Move?
+        finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001]  # in GHz/s
+        mediumrates = [100, 50, 20, 15, 10, 5, 2, 1]  # in GHz/s
 
         typebox = self._mw.scanType_comboBox.currentText()
         if typebox== 'Fine':
             scanrate = finerates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
         else:
-            # TODO error handling if index is too high for medium
-            scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
+            indx = int(self._mw.scanRate_comboBox.currentText())
+            #handle if index is too high for medium scan
+            if indx >= len(mediumrates):
+                error_dialog = QtWidgets.QErrorMessage()
+                error_dialog.showMessage('ERROR: index given for medium rates is too high')
+                error_dialog.exec()
+                self._mw.scanRate_comboBox.setCurrentIndex(0)
+                return
+                #alternatively (Todo?) change number of scanRate options based on whether we are on Fine or Medium
+            else:
+                scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
 
-        #TODO handle in case startwavlength is greater than or equal to stopwavlength
-        #requires memory of previous value
-        #OR better, can actually prevent change from occurring by DISABLING???? TODO look into!!!
-        #this may end up being rewritten, but oh well
         startwvln = self._mw.startWvln_doubleSpinBox.value() * 10 ** -9  # in m
         stopwvln = self._mw.stopWvln_doubleSpinBox.value() * 10**-9 #in m
 
         return startwvln, stopwvln, typebox, scanrate
 
+
     def update_calculated_scan_params(self):
         speed_c = 299792458 #speed of light in m/s
 
-        startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
-
-
-        #Do not allow stopWvln >= startWvln
-      #  if startWvln >= stopWvln:
-
+        try:
+            startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+        except:
+            return
 
         midWvln = (stopWvln + startWvln)/2 #in m
         rangeWvln = (stopWvln - startWvln) #in m
@@ -306,13 +274,12 @@ class M2ScannerGUI(GUIBase):
         rangeFreq = stopFreq - startFreq #in Hz
         scanrate_wvln = scanrate * speed_c/(midFreq**2) #in m/s
 
-
         self._mw.calcDwellTime_disp.setText('Hi') #Dwell time is related to how the counts get plotted. It is not
                                                 #a property of the laser, but gets used for interpreting counts
         self._mw.calcScanRes_disp.setText("{0:.3f} GHz/s \n{1:.3f} pm/s".format(scanrate*10**-9,scanrate_wvln*10**12))
         totaltime = rangeFreq/scanrate
         self._mw.calcTotalTime_disp.setText("{0:.0f} min, {1:.0f} sec".format(totaltime//60,totaltime%60))
-
+        #todo, if min > 60, show hrs. If hrs >24, show days
 
     #from laser.py gui
     @QtCore.Slot()
@@ -349,8 +316,6 @@ class M2ScannerGUI(GUIBase):
                 error_dialog.showMessage('ERROR: start wavelength must be less than stop wavelength')
                 error_dialog.exec()
                 return self._laser_logic.module_state()
-
-
 
             #            self._laser_logic.setup_terascan(scantype,(startWvln, stopWvln), scanrate)
             #            self._laser_logic.start_terascan(scantype)

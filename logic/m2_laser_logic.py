@@ -61,7 +61,6 @@ class M2LaserLogic(CounterLogic):
     queryInterval = ConfigOption('query_interval', 100) #needed for wavemeter
 
     sigUpdate = QtCore.Signal()
-
     sigStartScan = QtCore.Signal() #Just added
 
   ######  wavelength = 0 #JUST ADDED
@@ -106,7 +105,7 @@ class M2LaserLogic(CounterLogic):
         number_of_detectors = constraints.max_detectors
 
         # initialize data arrays
-        self.countdata = np.zeros([len(self.get_channels()), self._count_length])
+        self.countdata = np.zeros([len(self.get_channels()), self._count_length])#TODO are some of these unused/can be deleted?
         self.countdata_smoothed = np.zeros([len(self.get_channels()), self._count_length])
         self.rawdata = np.zeros([len(self.get_channels()), self._counting_samples])
         self._already_counted_samples = 0  # For gated counting
@@ -141,7 +140,7 @@ class M2LaserLogic(CounterLogic):
         self.current_wavelength = self._laser.get_wavelength()
 
 
-        self.init_data_logging() #currently is doing nothing, TODO fix
+     #   self.init_data_logging() #currently is doing nothing, TODO delete
         self.start_query_loop() #why put this here also?
 
 
@@ -182,7 +181,7 @@ class M2LaserLogic(CounterLogic):
         qi = self.queryInterval
         try:
             #print('laserloop', QtCore.QThread.currentThreadId())
-            self.current_wavelength = self._laser.get_wavelength() #todo uncomment fix
+            self.current_wavelength = self._laser.get_wavelength()
             pass
 
         except:
@@ -208,7 +207,7 @@ class M2LaserLogic(CounterLogic):
             QtCore.QCoreApplication.processEvents() #?
             time.sleep(self.queryInterval/1000)
 
-    def init_data_logging(self):
+    def init_data_logging(self): #todo: delete?
         """ Zero all log buffers. """
         print('To implement')
     #    self.data['current'] = np.zeros(self.bufferLength)
@@ -243,30 +242,30 @@ class M2LaserLogic(CounterLogic):
                     # switch the state variable off again
                     self.stopRequested = False #modified -ed
                     self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan! TODO
-                    self.sigCounterUpdated.emit()
-
-
+                    self.sigCounterUpdated.emit() #plot last data bits?
                     return
 
                 #TODO: read the current wavelength value here as well, average with below val
 
+          #      test = self._laser.get_terascan_wavelength()
+                #print('wvln 1: '+ str(self.current_wavelength))
+
                 # read the current counter value
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
+                #print('data: ' + str(self.rawdata))
 
-                #or this way, I can check the wavelength right before and right after I get a count :/
-                #and then average them to assign the "wavelength" the counts were taken at
-
-                #ADDED: read the current wavelength value
                 #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
                 #not sure right now if that's the case. Probably there's a better way to do this.
+
                 self.current_wavelength = self._laser.get_terascan_wavelength()
-                if self.current_wavelength == -1: #timeout in get_terascan_wavelength()
+                #print('wvln 2: ' + str(self.current_wavelength))
+
+                if self.current_wavelength == -1: #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
                     ###self.stopRequested = True
                     self.module_state.unlock()
                     self.queryTimer.timeout.emit()
                     #should run self.check_laser_loop() #start wavelength non-scan query loop back
                     return
-                print(self.current_wavelength)
 
                 if self.rawdata[0, 0] < 0: #counts can't be negative(?)
                     self.log.error('The counting went wrong, killing the counter.')
@@ -281,8 +280,10 @@ class M2LaserLogic(CounterLogic):
                     else:
                         self.log.error('No valid counting mode set! Can not process counter data.')
 
+               # print(abs(test- self.current_wavelength))
+
             # call this again from event loop
-            self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI
+            self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI, update_data function
             self.sigCountDataNext.emit() #this is connected to count_loop_body, so will call this func again
 
 
