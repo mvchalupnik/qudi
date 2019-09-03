@@ -19,8 +19,8 @@ import json
 import websocket
 
 
-class M2Laser(Base, M2LaserInterface):
-#class M2Laser(): #for debugging
+#class M2Laser(Base, M2LaserInterface):
+class M2Laser(): #for debugging
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -341,7 +341,7 @@ class M2Laser(Base, M2LaserInterface):
 
     def get_terascan_wavelength(self):
         #use this function to get the wavelength while terascan is running
-        #flush will cause socket timeout if you try to use it when the laser isn't scanning
+        #flush will cause socket timeout if you try to use it when the laser isn't scanning ?check todo
         timeouted = self.flush()
 
         if timeouted == -1: #timeout or some other error in flush()
@@ -360,7 +360,7 @@ class M2Laser(Base, M2LaserInterface):
         _, reply = self.send("stop_move_wave_t", {})
         print(reply)
         if reply[-1]["status"][0] == 1:
-            pass
+            print('-1')
             #self.log.warning("can't stop tuning: no wavemeter link")
 
     def tune_wavelength_table(self, wavelength, sync=True):
@@ -568,14 +568,13 @@ class M2Laser(Base, M2LaserInterface):
         :param sync_done bool: wait until the scan stop is complete.
         """
         self._check_terascan_type(scan_type)
-        _, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
-        print(reply)
-  #      if reply[-1]["status"][0] == 1:
-  #          pass
-  #          #self.log.warning("can't stop TeraScan: operation failed")
-  #      elif reply[-1]["status"][0] == 2:
-  #          pass
-  #          #self.log.warning("can't stop TeraScan: TeraScan not available")
+
+        #Using TCP connection (below) works, but is very slow
+        #_, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
+        #print(reply)
+
+        #FASTER WAY:
+        self._send_websocket_request('{"message_type":"task_request","task":["medium_scan_stop"]}')
         if sync:
             ready = 0
             while ready != -1:
