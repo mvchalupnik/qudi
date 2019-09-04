@@ -66,17 +66,17 @@ class M2LaserLogic(CounterLogic):
   ######  wavelength = 0 #JUST ADDED
 
     #############    Adapted from CounterLogic
-    ##TODO get rid of unnecessary signals here
     sigCounterUpdated = QtCore.Signal()
     sigCountDataNext = QtCore.Signal()
-    sigGatedCounterFinished = QtCore.Signal()
-    sigGatedCounterContinue = QtCore.Signal(bool)
-    sigCountingSamplesChanged = QtCore.Signal(int)
-    sigCountLengthChanged = QtCore.Signal(int)
-    sigCountFrequencyChanged = QtCore.Signal(float)
-    sigSavingStatusChanged = QtCore.Signal(bool)
-    sigCountStatusChanged = QtCore.Signal(bool)
-    sigCountingModeChanged = QtCore.Signal(CountingMode)
+    #To be deleted: signals below
+  #  sigGatedCounterFinished = QtCore.Signal()
+  #  sigGatedCounterContinue = QtCore.Signal(bool)
+  #  sigCountingSamplesChanged = QtCore.Signal(int)
+  #  sigCountLengthChanged = QtCore.Signal(int)
+  #  sigCountFrequencyChanged = QtCore.Signal(float)
+  #  sigSavingStatusChanged = QtCore.Signal(bool)
+  #  sigCountStatusChanged = QtCore.Signal(bool)
+  #  sigCountingModeChanged = QtCore.Signal(CountingMode)
 
     ## declare connectors
     counter1 = Connector(interface='SlowCounterInterface')
@@ -182,6 +182,7 @@ class M2LaserLogic(CounterLogic):
         try:
             #print('laserloop', QtCore.QThread.currentThreadId())
             self.current_wavelength = self._laser.get_wavelength()
+            self.current_state = 'idle'
             pass
 
         except:
@@ -256,8 +257,8 @@ class M2LaserLogic(CounterLogic):
 
                 #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
                 #not sure right now if that's the case. Probably there's a better way to do this.
+                self.current_wavelength, self.current_state = self._laser.get_terascan_wavelength()
 
-                self.current_wavelength = self._laser.get_terascan_wavelength()
                 #print('wvln 2: ' + str(self.current_wavelength))
 
                 if self.current_wavelength == -1: #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO

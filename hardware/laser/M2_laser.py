@@ -19,8 +19,8 @@ import json
 import websocket
 
 
-#class M2Laser(Base, M2LaserInterface):
-class M2Laser(): #for debugging
+class M2Laser(Base, M2LaserInterface):
+#class M2Laser(): #for debugging
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -346,10 +346,15 @@ class M2Laser(): #for debugging
 
         if timeouted == -1: #timeout or some other error in flush()
             print('Flush error in get_terascan_wavelength')
-            return -1
+            return -1, 'Error'
 
         out = self.get_laser_state()
-        return out['wavelength'][0]
+
+        if out.get('activity'):
+            status = out['activity']
+        else:
+            status = 'stitching'
+        return out['wavelength'][0], status
 
     #TODO if this works do the same for status, ie. stitching vs scanning
 

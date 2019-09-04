@@ -286,7 +286,7 @@ class M2ScannerGUI(GUIBase):
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
-
+        self._mw.status_disp.setText(self._laser_logic.current_state)
 #        self.updateButtonsEnabled()
 
 
