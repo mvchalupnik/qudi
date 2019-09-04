@@ -19,8 +19,8 @@ import json
 import websocket
 
 
-class M2Laser(Base, M2LaserInterface):
-#class M2Laser(): #for debugging
+#class M2Laser(Base, M2LaserInterface):
+class M2Laser(): #for debugging
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -574,7 +574,11 @@ class M2Laser(Base, M2LaserInterface):
         #print(reply)
 
         #FASTER WAY:
-        self._send_websocket_request('{"message_type":"task_request","task":["medium_scan_stop"]}')
+        self._send_websocket_request(
+            '{"stop_scan_stitching":1,"message_type":"page_update"}'
+        )
+        self._send_websocket_request(
+            '{"message_type":"task_request","task":["medium_scan_stop"]}')
         if sync:
             ready = 0
             while ready != -1:
