@@ -195,6 +195,7 @@ class M2ScannerGUI(GUIBase):
     def update_data(self):
         """ The function that grabs the terascan count data and sends it to the plot.
         """
+        print('update_data called in gui')
         ################ Adapted from spectrometer gui
         data = self._laser_logic.countdata
 
@@ -206,7 +207,7 @@ class M2ScannerGUI(GUIBase):
         # draw new data
         if data.shape[1] > 0:
             self._curve1.setData(x=data[0, :], y=data[1, :])
-
+        print('updatedata finished in gui')
 
       # if self._counting_logic.get_saving_state():
         #     self._mw.record_counts_Action.setText('Save')
@@ -232,6 +233,7 @@ class M2ScannerGUI(GUIBase):
 
 
     def get_scan_info(self):
+        print('get_scan_info called in gui')
         finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001]  # in GHz/s
         mediumrates = [100, 50, 20, 15, 10, 5, 2, 1]  # in GHz/s
 
@@ -246,7 +248,7 @@ class M2ScannerGUI(GUIBase):
                 error_dialog.showMessage('ERROR: index given for medium rates is too high')
                 error_dialog.exec()
                 self._mw.scanRate_comboBox.setCurrentIndex(0)
-                return
+                return #how is this not broken??
                 #alternatively (Todo?) change number of scanRate options based on whether we are on Fine or Medium
             else:
                 scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
@@ -254,6 +256,7 @@ class M2ScannerGUI(GUIBase):
         startwvln = self._mw.startWvln_doubleSpinBox.value() * 10 ** -9  # in m
         stopwvln = self._mw.stopWvln_doubleSpinBox.value() * 10**-9 #in m
 
+        print('get_scan_info finished in gui')
         return startwvln, stopwvln, typebox, scanrate
 
 
@@ -285,22 +288,32 @@ class M2ScannerGUI(GUIBase):
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
+        print('updateGui called in gui')
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
         self._mw.status_disp.setText(self._laser_logic.current_state)
 #        self.updateButtonsEnabled()
-
+        print('updateGui finished in gui')
 
     def start_clicked(self): #todo: move the logic elements of this function to the logic module
         """ Handling the Start button to stop and restart the counter.
         """
-
+        print('start_clicked called in gui')
         if self._laser_logic.module_state() == 'locked':
 
             print('STOP TERASCAN')
+            #We need to make sure the counter stops before the laser check loop starts up again
+            #using signals like this makes that ambiguous!
+
             self._mw.run_scan_Action.setText('Start counter')
-            self.sigStopCounter.emit()
+            self.sigStopCounter.emit() #Bypass this and just call stopCount to make sure things stop
+                                        #before terascan is started.
+            ##self._laser_logic.stopCount() #why wouldn't this just always be used in general, though? :(
+                                            #this seems to cause errors?
 
             #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+
+            #potentially better way: call stop_terascan continuously, periodically sleeping for short periods of time
+            #in order to ensure that if the scan hadn't actually started yet, that stop_scan will be called???
             self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
             self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
         else:
@@ -327,4 +340,5 @@ class M2ScannerGUI(GUIBase):
 
             self.sigStartCounter.emit() #start counter, if you follow it long enough it connects to count_loop_body in m2_laser_logic
 
+        print('start_clicked finished in gui')
         return self._laser_logic.module_state()

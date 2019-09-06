@@ -144,15 +144,17 @@ class M2Laser(Base, M2LaserInterface):
         else:
             return None
 
-    def flush(self, bits=1000000):
+    def flush(self, bits=None):
         """ Flush read buffer
         May cause socket timeout if used when laser isn't scanning
         """
 
         self.set_timeout(5) #Probably should not be hardcoded
         try:
-            report = self.socket.recv(bits)
-            #if bits, recv(bits), else report = self.socket.recv_all()?
+            if bits != None:
+                report = self.socket.recv(bits)
+            else:
+                report = self.socket.recv_all()
         except:
             return -1
         return report
@@ -342,7 +344,7 @@ class M2Laser(Base, M2LaserInterface):
     def get_terascan_wavelength(self):
         #use this function to get the wavelength while terascan is running
         #flush will cause socket timeout if you try to use it when the laser isn't scanning ?check todo
-        timeouted = self.flush()
+        timeouted = self.flush(1000000)
 
         if timeouted == -1: #timeout or some other error in flush()
             print('Flush error in get_terascan_wavelength')
@@ -588,7 +590,7 @@ class M2Laser(Base, M2LaserInterface):
             ready = 0
             while ready != -1:
                 ready = self.flush()
-            self.on_activate()
+            self.on_activate() #todo fix so on_activate isn't necessary
             ##self.wait_for_report("scan_stitch_op")
 
     _web_scan_status_str = ['off', 'cont', 'single', 'flyback', 'on', 'fail']

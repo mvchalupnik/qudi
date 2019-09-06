@@ -172,6 +172,7 @@ class M2LaserLogic(CounterLogic):
     #This is adapted from original laser_logic
     @QtCore.Slot()
     def check_laser_loop(self):
+        print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
         if self.stopRequest: #no -ed
             if self.module_state.can('stop'):
@@ -191,15 +192,20 @@ class M2LaserLogic(CounterLogic):
 
         self.queryTimer.start(qi)
         self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
+        print('check_laser_loop finished in logic')
+
 
     @QtCore.Slot()
     def start_query_loop(self):
         """ Start the readout loop. """
+        print('start_query_loop called in logic')
         self.module_state.run()
         self.queryTimer.start(self.queryInterval)
+        print('start_query_loop finished in logic')
 
     @QtCore.Slot()
     def stop_query_loop(self):
+        print('stop_query_loop called in logic')
         """ Stop the readout loop. """
         self.stopRequest = True #no -ed
         for i in range(10):
@@ -207,6 +213,7 @@ class M2LaserLogic(CounterLogic):
                 return
             QtCore.QCoreApplication.processEvents() #?
             time.sleep(self.queryInterval/1000)
+        print('stop_query_loop finished in logic')
 
     def init_data_logging(self): #todo: delete?
         """ Zero all log buffers. """
@@ -221,6 +228,7 @@ class M2LaserLogic(CounterLogic):
 
     #overload from counter_logic.py
     def count_loop_body(self):
+        print('count_loop_body called in logic')
         """ This method gets the count data from the hardware for the continuous counting mode (default).
 
         It runs repeatedly in the logic module event loop by being connected
@@ -257,11 +265,11 @@ class M2LaserLogic(CounterLogic):
 
                 #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
                 #not sure right now if that's the case. Probably there's a better way to do this.
-                self.current_wavelength, self.current_state = self._laser.get_terascan_wavelength()
+                wavelength, current_state = self._laser.get_terascan_wavelength()
 
                 #print('wvln 2: ' + str(self.current_wavelength))
 
-                if self.current_wavelength == -1: #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
+                if wavelength == -1: #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
                     ###self.stopRequested = True
                     self.module_state.unlock()
                     self.queryTimer.timeout.emit()
@@ -273,10 +281,14 @@ class M2LaserLogic(CounterLogic):
                     self.stopRequested = True #modified -ed
                 else:
                     if self._counting_mode == CountingMode['CONTINUOUS']:
+                        self.current_state = current_state
+                        self.current_wavelength = wavelength #do it this way to avoid blocking when updateGui is called below
+                        #since updateGui needs to access self.current_wavelength but it is connected to a signal so
+                        #runs asynchronously with this function which calls itself/loops
                         self._process_data_continous()
-                    elif self._counting_mode == CountingMode['GATED']:
+                    elif self._counting_mode == CountingMode['GATED']: #not tested
                         self._process_data_gated()
-                    elif self._counting_mode == CountingMode['FINITE_GATED']:
+                    elif self._counting_mode == CountingMode['FINITE_GATED']: #not tested
                         self._process_data_finite_gated()
                     else:
                         self.log.error('No valid counting mode set! Can not process counter data.')
@@ -286,12 +298,13 @@ class M2LaserLogic(CounterLogic):
             # call this again from event loop
             self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI, update_data function
             self.sigCountDataNext.emit() #this is connected to count_loop_body, so will call this func again
+            #these two are essentially called in parallel (update gui and count_loop_body).
+            #this is okay because they don't access the same resources. count_loop_body accesses raw_data
+            #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
 
+            self.sigUpdate.emit() #connects to updateGui to update the wavelength
+        print('count_loop_body finished in logic')
 
-            ##Careful: below may slow scan down?
-            #Ideally this would be running in parallel???? but maybe not possible given we access and write to
-            #the wavelength data with the two different processes
-            self.sigUpdate.emit()
         return
 
 
@@ -344,10 +357,10 @@ class M2LaserLogic(CounterLogic):
     @QtCore.Slot()
     def start_terascan(self,scantype, scanbounds, scanrate): #added, possibly/probably unecessary - could do straight in gui.
         #but maybe we don't want the gui talking directly to hardware?
-
+        print('start_terascan called in logic')
         self._laser.setup_terascan(scantype, scanbounds, scanrate)
         self._laser.start_terascan(scantype)
-
+        print('start terascan finished in logic')
         return
 
 #From logic/spectrum.py
