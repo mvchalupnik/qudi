@@ -119,6 +119,7 @@ class M2ScannerGUI(GUIBase):
         self._mw.startWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
         self._mw.stopWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
 
+        self._mw.plotPoints_checkBox.stateChanged.connect(self.update_points_checkbox)
 
         #below from countergui.py
         self._pw = self._mw.plotWidget
@@ -146,15 +147,15 @@ class M2ScannerGUI(GUIBase):
         ##self._pw.setLabel('top', 'Relative Frequency', units='Hz') #TODO implement
 
          # Create an empty plot curve to be filled later, set its pen
-        #self._curve1 = self._pw.plot()
-        #self._curve1.setPen(palette.c1, width=2)
+        self._curve1 = self._pw.plot()
+        self._curve1.setPen(palette.c1, width=2)
 
-        self._curve1 = pg.PlotDataItem(
-                pen=pg.mkPen(palette.c3, style=QtCore.Qt.DotLine),
-                symbol='s',
-                symbolPen=palette.c3,
-                symbolBrush=palette.c3,
-                symbolSize=5)
+        #self._curve1 = pg.PlotDataItem(
+        #        pen=pg.mkPen(palette.c3, style=QtCore.Qt.DotLine),
+        #        symbol='s',
+        #        symbolPen=palette.c3,
+        #        symbolBrush=palette.c3,
+        #        symbolSize=5)
         self._pw.addItem(self._curve1)
 
         #initialize starting values
@@ -343,3 +344,16 @@ class M2ScannerGUI(GUIBase):
 
 #        print('start_clicked finished in gui')
         return self._laser_logic.module_state()
+
+    def update_points_checkbox(self):
+        #check if locked?
+        if not self._mw.plotPoints_checkBox.isChecked():
+            self._curve1.setPen(palette.c1, width=2)
+            self._curve1.setSymbol(None)
+        else:
+            self._curve1.setPen(palette.c3, style=QtCore.Qt.DotLine)
+            self._curve1.setSymbol('s')
+            self._curve1.setSymbolBrush(palette.c3)
+            self._curve1.setSymbolSize(5)
+            self._curve1.setSymbolPen(palette.c3)
+        #self._pw.addItem(self._curve1)

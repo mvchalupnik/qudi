@@ -387,6 +387,12 @@ class M2LaserLogic(CounterLogic):
             filelabel = 'scan'
             spectrum_data = self.countdata #countdata_smoothed?
 
+            # Don't include initialization 0's
+            mask = (spectrum_data == 0).all(0)
+            start_idx = np.argmax(~mask)
+            spectrum_data = spectrum_data[:, start_idx:]
+            self.countdata = spectrum_data #save over countdata to not include initialization 0s
+
         # Add name_tag as postfix to filename
         if name_tag != '':
             filelabel = filelabel + '_' + name_tag
@@ -418,7 +424,7 @@ class M2LaserLogic(CounterLogic):
         #     data['signal_mod_off'] = self.diff_spec_data_mod_off[1, :]
         #     data['differential'] = spectrum_data[1, :]
         # else:
-        #     data['signal'] = spectrum_data[1, :]
+        data['signal'] = spectrum_data[1, :]
         #
         # if not background and len(self._spectrum_data_corrected) != 0:
         #     data['corrected'] = self._spectrum_data_corrected[1, :]
@@ -439,7 +445,7 @@ class M2LaserLogic(CounterLogic):
 
         @return fig fig: a matplotlib figure object to be saved to file.
         """
-        wavelength = self.countdata[0, :] * 1e9  # convert m to nm for plot
+        wavelength = self.countdata[0, :]
         spec_data = self.countdata[1, :]
 
         prefix = ['', 'k', 'M', 'G', 'T']
