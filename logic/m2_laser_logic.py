@@ -77,6 +77,7 @@ class M2LaserLogic(CounterLogic):
   #  sigSavingStatusChanged = QtCore.Signal(bool)
   #  sigCountStatusChanged = QtCore.Signal(bool)
   #  sigCountingModeChanged = QtCore.Signal(CountingMode)
+    sigScanComplete = QtCore.Signal() #JUST ADDED, may be unnecessary
 
     ## declare connectors
     counter1 = Connector(interface='SlowCounterInterface')
@@ -272,9 +273,12 @@ class M2LaserLogic(CounterLogic):
                 #print('wvln 2: ' + str(self.current_wavelength))
 
                 if wavelength == -1: #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
+                    #TODO FIX THIS, combine with m2scanner.py start_clicked
                     ###self.stopRequested = True
                     self.module_state.unlock()
                     self.queryTimer.timeout.emit()
+
+                    self.sigScanComplete.emit()
                     #should run self.check_laser_loop() #start wavelength non-scan query loop back
                     return
 
@@ -483,3 +487,10 @@ class M2LaserLogic(CounterLogic):
         fig.tight_layout()
 
         return fig
+
+    def order_data(self):
+        #put data in wavelength order
+        temp = np.transpose(self.countdata)
+        temp = temp[temp[:, 0].argsort()]
+        self.countdata = np.transpose(temp)
+        print(self.countdata)

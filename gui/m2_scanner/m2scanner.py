@@ -88,6 +88,7 @@ class M2ScannerGUI(GUIBase):
         # Connect signals for counter
         self.sigStartCounter.connect(self._laser_logic.startCount)
         self.sigStopCounter.connect(self._laser_logic.stopCount)
+        self._laser_logic.sigScanComplete.connect(self.scanComplete) #just added
 
         # Handling signals from the logic
         #   signals during terascan
@@ -120,6 +121,7 @@ class M2ScannerGUI(GUIBase):
         self._mw.stopWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
 
         self._mw.plotPoints_checkBox.stateChanged.connect(self.update_points_checkbox)
+        self._mw.replot_pushButton.clicked.connect(self.replot_pressed)
 
         #below from countergui.py
         self._pw = self._mw.plotWidget
@@ -306,6 +308,8 @@ class M2ScannerGUI(GUIBase):
             #We need to make sure the counter stops before the laser check loop starts up again
             #using signals like this makes that ambiguous!
 
+            self._mw.replot_pushButton.setEnabled(True)
+
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit() #Bypass this and just call stopCount to make sure things stop
                                         #before terascan is started.
@@ -320,6 +324,7 @@ class M2ScannerGUI(GUIBase):
             self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
         else:
             print('START TERASCAN')
+            self._mw.replot_pushButton.setEnabled(False)
             self._mw.run_scan_Action.setText('Stop counter')
 
             # Adding:
@@ -357,3 +362,14 @@ class M2ScannerGUI(GUIBase):
             self._curve1.setSymbolSize(5)
             self._curve1.setSymbolPen(palette.c3)
         #self._pw.addItem(self._curve1)
+
+    def replot_pressed(self):
+        if self._laser_logic.module_state() == 'locked':
+            pass #Button should be disabled when module_state is locked, so this should never happen anyway
+        else:
+            self._laser_logic.order_data()
+            self.update_data()
+
+    def scanComplete(self):
+        self._mw.replot_pushButton.setEnabled(True)
+        #todo: add more or combine into something else
