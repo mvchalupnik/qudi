@@ -95,7 +95,7 @@ class M2LaserLogic(CounterLogic):
         # Connect to hardware and save logic
         print('on_activate is called in m2_laser_logic')
         self._counting_device = self.counter1()
-       #### self._save_logic = self.savelogic()
+        self._save_logic = self.savelogic()
 
         # Recall saved app-parameters
         if 'counting_mode' in self._statusVariables:
@@ -103,6 +103,9 @@ class M2LaserLogic(CounterLogic):
 
         constraints = self.get_hardware_constraints()
         number_of_detectors = constraints.max_detectors
+
+        #initialize repetition count
+        self.repetition_count = 0
 
         # initialize data arrays
         self.countdata = np.zeros([len(self.get_channels()), self._count_length])#TODO are some of these unused/can be deleted?
@@ -172,7 +175,7 @@ class M2LaserLogic(CounterLogic):
     #This is adapted from original laser_logic
     @QtCore.Slot()
     def check_laser_loop(self):
-        print('check_laser_loop called in logic')
+ #       print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
         if self.stopRequest: #no -ed
             if self.module_state.can('stop'):
@@ -192,20 +195,20 @@ class M2LaserLogic(CounterLogic):
 
         self.queryTimer.start(qi)
         self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
-        print('check_laser_loop finished in logic')
+ #       print('check_laser_loop finished in logic')
 
 
     @QtCore.Slot()
     def start_query_loop(self):
         """ Start the readout loop. """
-        print('start_query_loop called in logic')
+ #       print('start_query_loop called in logic')
         self.module_state.run()
         self.queryTimer.start(self.queryInterval)
-        print('start_query_loop finished in logic')
+ #       print('start_query_loop finished in logic')
 
     @QtCore.Slot()
     def stop_query_loop(self):
-        print('stop_query_loop called in logic')
+  #      print('stop_query_loop called in logic')
         """ Stop the readout loop. """
         self.stopRequest = True #no -ed
         for i in range(10):
@@ -213,7 +216,7 @@ class M2LaserLogic(CounterLogic):
                 return
             QtCore.QCoreApplication.processEvents() #?
             time.sleep(self.queryInterval/1000)
-        print('stop_query_loop finished in logic')
+ #       print('stop_query_loop finished in logic')
 
     def init_data_logging(self): #todo: delete?
         """ Zero all log buffers. """
@@ -228,7 +231,6 @@ class M2LaserLogic(CounterLogic):
 
     #overload from counter_logic.py
     def count_loop_body(self):
-        print('count_loop_body called in logic')
         """ This method gets the count data from the hardware for the continuous counting mode (default).
 
         It runs repeatedly in the logic module event loop by being connected
@@ -237,7 +239,7 @@ class M2LaserLogic(CounterLogic):
 
         #odmr_logic flips the two statements below! in _scan_odmr_line
         #todo figure out which is best
-        print('count_loop_body runs')
+#        print('count_loop_body runs')
         if self.module_state() == 'locked': #
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
@@ -303,7 +305,7 @@ class M2LaserLogic(CounterLogic):
             #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
 
             self.sigUpdate.emit() #connects to updateGui to update the wavelength
-        print('count_loop_body finished in logic')
+ #       print('count_loop_body finished in logic')
 
         return
 
@@ -357,10 +359,10 @@ class M2LaserLogic(CounterLogic):
     @QtCore.Slot()
     def start_terascan(self,scantype, scanbounds, scanrate): #added, possibly/probably unecessary - could do straight in gui.
         #but maybe we don't want the gui talking directly to hardware?
-        print('start_terascan called in logic')
+ #       print('start_terascan called in logic')
         self._laser.setup_terascan(scantype, scanbounds, scanrate)
         self._laser.start_terascan(scantype)
-        print('start terascan finished in logic')
+ #       print('start terascan finished in logic')
         return
 
 #From logic/spectrum.py
@@ -375,13 +377,15 @@ class M2LaserLogic(CounterLogic):
             This ordered dictionary is added to the default data file header. It allows arbitrary
             additional experimental information to be included in the saved data file header.
         """
+        self.repetition_count += 1 #increase repetitioncount
+
         filepath = self._save_logic.get_path_for_module(module_name='spectra')
         if background:
             filelabel = 'background'
             spectrum_data = self._spectrum_background
         else:
-            filelabel = 'spectrum'
-            spectrum_data = self._spectrum_data
+            filelabel = 'scan'
+            spectrum_data = self.countdata #countdata_smoothed?
 
         # Add name_tag as postfix to filename
         if name_tag != '':
@@ -391,12 +395,12 @@ class M2LaserLogic(CounterLogic):
         parameters = OrderedDict()
         parameters['Spectrometer acquisition repetitions'] = self.repetition_count
 
-        # add all fit parameter to the saved data:
-        if self.fc.current_fit_result is not None:
-            parameters['Fit function'] = self.fc.current_fit
-
-            for name, param in self.fc.current_fit_param.items():
-                parameters[name] = str(param)
+   #      # add all fit parameter to the saved data:
+   #      if self.fc.current_fit_result is not None:
+   #          parameters['Fit function'] = self.fc.current_fit
+   #
+   #          for name, param in self.fc.current_fit_param.items():
+    #             parameters[name] = str(param)
 
         # add any custom header params
         if custom_header is not None:
@@ -408,16 +412,16 @@ class M2LaserLogic(CounterLogic):
 
         data['wavelength'] = spectrum_data[0, :]
 
-        # If the differential spectra arrays are not empty, save them as raw data
-        if len(self.diff_spec_data_mod_on) != 0 and len(self.diff_spec_data_mod_off) != 0:
-            data['signal_mod_on'] = self.diff_spec_data_mod_on[1, :]
-            data['signal_mod_off'] = self.diff_spec_data_mod_off[1, :]
-            data['differential'] = spectrum_data[1, :]
-        else:
-            data['signal'] = spectrum_data[1, :]
-
-        if not background and len(self._spectrum_data_corrected) != 0:
-            data['corrected'] = self._spectrum_data_corrected[1, :]
+        # # If the differential spectra arrays are not empty, save them as raw data
+        # if len(self.diff_spec_data_mod_on) != 0 and len(self.diff_spec_data_mod_off) != 0:
+        #     data['signal_mod_on'] = self.diff_spec_data_mod_on[1, :]
+        #     data['signal_mod_off'] = self.diff_spec_data_mod_off[1, :]
+        #     data['differential'] = spectrum_data[1, :]
+        # else:
+        #     data['signal'] = spectrum_data[1, :]
+        #
+        # if not background and len(self._spectrum_data_corrected) != 0:
+        #     data['corrected'] = self._spectrum_data_corrected[1, :]
 
         fig = self.draw_figure()
 
@@ -428,3 +432,48 @@ class M2LaserLogic(CounterLogic):
                                    filelabel=filelabel,
                                    plotfig=fig)
         self.log.debug('Spectrum saved to:\n{0}'.format(filepath))
+
+    #from spectrum.py in logic
+    def draw_figure(self):
+        """ Draw the summary plot to save with the data.
+
+        @return fig fig: a matplotlib figure object to be saved to file.
+        """
+        wavelength = self.countdata[0, :] * 1e9  # convert m to nm for plot
+        spec_data = self.countdata[1, :]
+
+        prefix = ['', 'k', 'M', 'G', 'T']
+        prefix_index = 0
+        rescale_factor = 1
+
+        # Rescale spectrum data with SI prefix
+        while np.max(spec_data) / rescale_factor > 1000:
+            rescale_factor = rescale_factor * 1000
+            prefix_index = prefix_index + 1
+
+        intensity_prefix = prefix[prefix_index]
+
+        # Prepare the figure to save as a "data thumbnail"
+        plt.style.use(self._save_logic.mpl_qd_style)
+
+        fig, ax1 = plt.subplots()
+
+        ax1.plot(wavelength,
+                 spec_data / rescale_factor,
+                 linestyle=':',
+                 linewidth=0.5
+                 )
+
+        # If there is a fit, plot it also
+ #       if self.fc.current_fit_result is not None:
+ #           ax1.plot(self.spectrum_fit[0] * 1e9,  # convert m to nm for plot
+ #                    self.spectrum_fit[1] / rescale_factor,
+ #                    marker='None'
+ #                    )
+
+        ax1.set_xlabel('Wavelength (nm)')
+        ax1.set_ylabel('Intensity ({}count)'.format(intensity_prefix))
+
+        fig.tight_layout()
+
+        return fig

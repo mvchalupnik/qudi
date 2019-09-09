@@ -78,6 +78,7 @@ class M2ScannerGUI(GUIBase):
         ###################
 
         self._mw.run_scan_Action.triggered.connect(self.start_clicked)  # start_clicked then triggers sigStartCounter
+        self._mw.save_scan_Action.triggered.connect(self.save_spectrum_data)  # start_clicked then triggers sigStartCounter
 
         #       self._mw.save_scan_Action.triggered.connect(self.save_clicked) #there is no save_clicked function
         # self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
@@ -195,7 +196,7 @@ class M2ScannerGUI(GUIBase):
     def update_data(self):
         """ The function that grabs the terascan count data and sends it to the plot.
         """
-        print('update_data called in gui')
+#        print('update_data called in gui')
         ################ Adapted from spectrometer gui
         data = self._laser_logic.countdata
 
@@ -207,7 +208,7 @@ class M2ScannerGUI(GUIBase):
         # draw new data
         if data.shape[1] > 0:
             self._curve1.setData(x=data[0, :], y=data[1, :])
-        print('updatedata finished in gui')
+ #       print('updatedata finished in gui')
 
       # if self._counting_logic.get_saving_state():
         #     self._mw.record_counts_Action.setText('Save')
@@ -229,11 +230,11 @@ class M2ScannerGUI(GUIBase):
 
 
     def save_spectrum_data(self):
-        self._spectrum_logic.save_spectrum_data()
+        self._laser_logic.save_spectrum_data()
 
 
     def get_scan_info(self):
-        print('get_scan_info called in gui')
+#        print('get_scan_info called in gui')
         finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001]  # in GHz/s
         mediumrates = [100, 50, 20, 15, 10, 5, 2, 1]  # in GHz/s
 
@@ -256,7 +257,7 @@ class M2ScannerGUI(GUIBase):
         startwvln = self._mw.startWvln_doubleSpinBox.value() * 10 ** -9  # in m
         stopwvln = self._mw.stopWvln_doubleSpinBox.value() * 10**-9 #in m
 
-        print('get_scan_info finished in gui')
+#        print('get_scan_info finished in gui')
         return startwvln, stopwvln, typebox, scanrate
 
 
@@ -288,16 +289,16 @@ class M2ScannerGUI(GUIBase):
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
-        print('updateGui called in gui')
+#       print('updateGui called in gui')
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
         self._mw.status_disp.setText(self._laser_logic.current_state)
 #        self.updateButtonsEnabled()
-        print('updateGui finished in gui')
+ #       print('updateGui finished in gui')
 
     def start_clicked(self): #todo: move the logic elements of this function to the logic module
         """ Handling the Start button to stop and restart the counter.
         """
-        print('start_clicked called in gui')
+#        print('start_clicked called in gui')
         if self._laser_logic.module_state() == 'locked':
 
             print('STOP TERASCAN')
@@ -340,5 +341,5 @@ class M2ScannerGUI(GUIBase):
 
             self.sigStartCounter.emit() #start counter, if you follow it long enough it connects to count_loop_body in m2_laser_logic
 
-        print('start_clicked finished in gui')
+#        print('start_clicked finished in gui')
         return self._laser_logic.module_state()

@@ -21,6 +21,22 @@ import websocket
 
 class M2Laser(Base, M2LaserInterface):
 #class M2Laser(): #for debugging
+
+    #copy and paste the following to the console when debugging:
+    """
+from hardware.laser import M2_laser as m2
+laser = m2.M2Laser()
+laser._ip = '10.243.43.58'
+laser._port = 39933
+laser._timeout = 5
+laser.on_activate()
+
+laser.setup_terascan("medium", (750, 751), 10E9)
+
+laser.get_laser_state()
+laser.start_terascan("medium")
+laser.stop_terascan("medium")"""
+
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -56,7 +72,9 @@ class M2Laser(Base, M2LaserInterface):
         self.transmission_id = 1
         self._last_status = {}
 
+        print('connecting to laser')
         self.connect_laser()
+        print('connecting to wavemeter')
         self.connect_wavemeter()
 
     def on_deactivate(self):
