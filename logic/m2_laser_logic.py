@@ -108,6 +108,9 @@ class M2LaserLogic(CounterLogic):
         #initialize repetition count
         self.repetition_count = 0
 
+        #initialize current count
+        self.integrated_counts = 0
+
         # initialize data arrays
         self.countdata = np.zeros([len(self.get_channels()), self._count_length])#TODO are some of these unused/can be deleted?
         self.countdata_smoothed = np.zeros([len(self.get_channels()), self._count_length])
@@ -257,32 +260,31 @@ class M2LaserLogic(CounterLogic):
                     self.sigCounterUpdated.emit() #plot last data bits?
                     return
 
-                #TODO: read the current wavelength value here as well, average with below val
+                #read the current wavelength value here as well, average with below val?
 
-          #      test = self._laser.get_terascan_wavelength()
-                #print('wvln 1: '+ str(self.current_wavelength))
 
-                # read the current counter value
+                # read the current counter value.
+                #national_instruments_x_series.py is set up to return an array with a length dependent on
+                #the counter clock frequency. To integrate over counts, just sum this array along the correct dimension
+                #TODO, check this with a real photodiode by printing and seeing if it does give an array
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
-                #print('data: ' + str(self.rawdata))
 
+                numSamples = self.rawdata.shape[0]
+                self.rawdata = np.sum(self.rawdata, axis=1)
+                self.rawdata.shape = (numSamples,1)
 
-                #tic = time.time()
-                #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
-                #not sure right now if that's the case. Probably there's a better way to do this.
+                #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
                 wavelength, current_state = self._laser.get_terascan_wavelength()
-                #toc = time.time()
-                #print('time' + str(toc-tic))
 
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
                     self.sigCountDataNext.emit()
                     return
 
-
+                #Handle finished scan
                 if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
-                    #TODO FIX THIS, combine with m2scanner.py start_clicked
-                    ###self.stopRequested = True
+                    #TODO combine with m2scanner.py start_clicked
+                    ###self.stopRequested = True #todo try uncomenting
                     self.module_state.unlock()
                     self.queryTimer.timeout.emit()
 
@@ -290,6 +292,7 @@ class M2LaserLogic(CounterLogic):
                     #should run self.check_laser_loop() #start wavelength non-scan query loop back
                     return
 
+                #handle data collected from scan
                 if self.rawdata[0, 0] < 0: #counts can't be negative(?)
                     self.log.error('The counting went wrong, killing the counter.')
                     self.stopRequested = True #modified -ed
@@ -307,7 +310,6 @@ class M2LaserLogic(CounterLogic):
                     else:
                         self.log.error('No valid counting mode set! Can not process counter data.')
 
-               # print(abs(test- self.current_wavelength))
 
             # call this again from event loop
             self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI, update_data function
@@ -317,9 +319,10 @@ class M2LaserLogic(CounterLogic):
             #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
 
             self.sigUpdate.emit() #connects to updateGui to update the wavelength
- #       print('count_loop_body finished in logic')
 
         return
+
+
 
 
 #Overload from counter_logic so that we can save wavelength as well as counts

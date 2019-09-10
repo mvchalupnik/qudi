@@ -251,7 +251,7 @@ class M2ScannerGUI(GUIBase):
                 error_dialog = QtWidgets.QErrorMessage()
                 error_dialog.showMessage('ERROR: index given for medium rates is too high')
                 error_dialog.exec()
-                self._mw.scanRate_comboBox.setCurrentIndex(0)
+                self._mw.scanRate_comboBox.setCurrentIndex(7)
                 return #how is this not broken??
                 #alternatively (Todo?) change number of scanRate options based on whether we are on Fine or Medium
             else:
@@ -281,8 +281,9 @@ class M2ScannerGUI(GUIBase):
         rangeFreq = stopFreq - startFreq #in Hz
         scanrate_wvln = scanrate * speed_c/(midFreq**2) #in m/s
 
-        self._mw.calcDwellTime_disp.setText('Hi') #Dwell time is related to how the counts get plotted. It is not
-                                                #a property of the laser, but gets used for interpreting counts
+        self._mw.calcDwellTime_disp.setText("0.2 sec \n{0:.4f} pm".format(0.2*scanrate_wvln*10**12))
+                    #Scan resolution is 0.2 sec  (based on manually testing, with print
+                    #and time.time() statements in countloop). May be different on a different computer
         self._mw.calcScanRes_disp.setText("{0:.3f} GHz/s \n{1:.3f} pm/s".format(scanrate*10**-9,scanrate_wvln*10**12))
         totaltime = rangeFreq/scanrate
         self._mw.calcTotalTime_disp.setText("{0:.0f} min, {1:.0f} sec".format(totaltime//60,totaltime%60))

@@ -916,7 +916,7 @@ laser.stop_terascan("medium")"""
             msg = message.rsplit('},{', 1) #split from right
             message = msg[0]
             msg = message.split('},{', 1) #split from left
-            message = msg[-1]
+            message = msg[1]
             message = '[{'+ message + '}]'
 #            print(message)
 
