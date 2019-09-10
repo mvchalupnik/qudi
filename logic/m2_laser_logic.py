@@ -266,13 +266,21 @@ class M2LaserLogic(CounterLogic):
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
                 #print('data: ' + str(self.rawdata))
 
+
+                #tic = time.time()
                 #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
                 #not sure right now if that's the case. Probably there's a better way to do this.
                 wavelength, current_state = self._laser.get_terascan_wavelength()
+                #toc = time.time()
+                #print('time' + str(toc-tic))
 
-                #print('wvln 2: ' + str(self.current_wavelength))
+                #Don't collect counts when the laser is stitching or otherwise not scanning
+                if current_state == 'stitching':
+                    self.sigCountDataNext.emit()
+                    return
 
-                if wavelength == -1: #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
+
+                if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
                     #TODO FIX THIS, combine with m2scanner.py start_clicked
                     ###self.stopRequested = True
                     self.module_state.unlock()

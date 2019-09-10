@@ -162,17 +162,14 @@ laser.stop_terascan("medium")"""
         else:
             return None
 
-    def flush(self, bits=None):
+    def flush(self, bits=1000000):
         """ Flush read buffer
         May cause socket timeout if used when laser isn't scanning
         """
 
-        self.set_timeout(5) #Probably should not be hardcoded
+        self.set_timeout(5) #if this is lower than 5 (e.g. 2) things crash
         try:
-            if bits != None:
-                report = self.socket.recv(bits)
-            else:
-                report = self.socket.recv_all()
+            report = self.socket.recv(bits)
         except:
             return -1
         return report
@@ -212,8 +209,8 @@ laser.stop_terascan("medium")"""
             report = self.socket.recv(10000)
             op_reports, parameters_reports = self._parse_reply(report)
             for op_report, parameters_report in zip(op_reports, parameters_reports):
-                print(op_report)
-                print(parameters_report)
+ #               print(op_report)
+ #               print(parameters_report)
 
                 if not self._is_report_op(op_report):
                     pass
@@ -361,12 +358,14 @@ laser.stop_terascan("medium")"""
 
     def get_terascan_wavelength(self):
         #use this function to get the wavelength while terascan is running
-        #flush will cause socket timeout if you try to use it when the laser isn't scanning ?check todo
+        #currently calls to this function take ~.21 sec
         timeouted = self.flush(1000000)
 
         if timeouted == -1: #timeout or some other error in flush()
-            print('Flush error in get_terascan_wavelength')
-            return -1, 'Error'
+            #assume this means the scan is done, even though there are other possible reasons for this to occur
+            #(eg. bad connection)
+            print('Terascan complete')
+            return -1, 'complete'
 
         out = self.get_laser_state()
 
@@ -374,9 +373,25 @@ laser.stop_terascan("medium")"""
             status = out['activity']
         else:
             status = 'stitching'
+
         return out['wavelength'][0], status
 
-    #TODO if this works do the same for status, ie. stitching vs scanning
+    def get_terascan_wavelength_web(self):
+        #Currently does not work very well
+        #uses websocket instead of tcp socket to get wavelength
+        #calls take ~0.18 sec, not appreciably faster
+        while True:
+            try:
+                msg_data = self._read_websocket_status_leftpanel()
+                break
+            except:
+                time.sleep(0.05)
+
+        if msg_data['dodgy_reading']:
+            status = 'stitching'
+        else:
+            status = 'scanning'
+        return msg_data['wlm_wavelength'], status
 
 
     def stop_tuning(self):
@@ -598,7 +613,7 @@ laser.stop_terascan("medium")"""
         #_, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
         #print(reply)
 
-        #FASTER WAY:
+        #FASTER WAY: Seems is already here via stop_scan_web - look into
         self._send_websocket_request(
             '{"stop_scan_stitching":1,"message_type":"page_update"}'
         )
@@ -813,6 +828,7 @@ laser.stop_terascan("medium")"""
             self._check_fast_scan_type(scan_type)
             scan_type = scan_type.replace("continuous", "cont")
         scan_task = scan_type + "_stop"
+        print(scan_task) #check
         self._send_websocket_request('{{"message_type":"task_request","task":["{}"]}}'.format(scan_task))
 
     _default_terascan_rates = {"line": 10E6, "fine": 100E6, "medium": 5E9}
@@ -868,7 +884,7 @@ laser.stop_terascan("medium")"""
             attempts += 1
             if (attempts > 10 and ctd.passed()):
                 #raise M2Error("coudn't stop all operations: timed out")
-                print('THIS HAPPENED HERE')
+                print('M2 Error: could not stop all operations')
         return not operating
 
     def _build_message(self, op, params, transmission_id=None):
@@ -892,7 +908,7 @@ laser.stop_terascan("medium")"""
         :param message: json string
         :return: message dictionary
         """
-        print(message)
+  #      print(message)
 #        print(len(message))  # seems messages are greater than the buffer length... not sure why
 
         if len(message) >= self.buffersize: #As is, this throws away data from messages on the edges of the buffer
@@ -900,7 +916,7 @@ laser.stop_terascan("medium")"""
             msg = message.rsplit('},{', 1) #split from right
             message = msg[0]
             msg = message.split('},{', 1) #split from left
-            message = msg[1]
+            message = msg[-1]
             message = '[{'+ message + '}]'
 #            print(message)
 
@@ -994,6 +1010,23 @@ laser.stop_terascan("medium")"""
         finally:
             ws.recv()
             ws.close()
+
+    def _read_websocket_status_leftpanel(self, present_key=None, nmax=20):
+        """ Reads the websocket status
+
+        :param present_key: not sure, I think its the status that we are waiting or
+        :param nmax: number of iterations to wait for
+        :return: websocket status
+        """
+        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address[0]), timeout=self.timeout)
+        try:
+            self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax) #first call gets first_page
+            return self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax) #second call gets left_panel
+        finally:
+            ws.recv()
+            ws.close()
+
+
 
     def _check_terascan_type(self, scan_type):
         """Checks that the terascan type is valid.
