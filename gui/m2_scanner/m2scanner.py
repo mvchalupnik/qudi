@@ -19,6 +19,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 """
 
+import time
 import os
 import pyqtgraph as pg
 import numpy as np
@@ -296,7 +297,6 @@ class M2ScannerGUI(GUIBase):
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
-#       print('updateGui called in gui')
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
         self._mw.status_disp.setText(self._laser_logic.current_state)
 #        self.updateButtonsEnabled()
@@ -315,12 +315,11 @@ class M2ScannerGUI(GUIBase):
             self._mw.replot_pushButton.setEnabled(True)
 
             self._mw.status_disp.setText('stopping scan') #is not being seen.?
-            ##self._laser_logic.current_state = 'stopping scan'
+            self._laser_logic.current_state = 'stopping scan'
 
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
             #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
-
 
             self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
             self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop

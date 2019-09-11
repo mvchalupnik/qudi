@@ -179,7 +179,7 @@ class M2LaserLogic(CounterLogic):
     #This is adapted from original laser_logic
     @QtCore.Slot()
     def check_laser_loop(self):
- #       print('check_laser_loop called in logic')
+  #      print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
         if self.stopRequest: #no -ed
             if self.module_state.can('stop'):
@@ -243,12 +243,14 @@ class M2LaserLogic(CounterLogic):
 
         #odmr_logic flips the two statements below! in _scan_odmr_line
         #todo figure out which is best
-#        print('count_loop_body runs')
+       # print('count_loop_body runs')
         if self.module_state() == 'locked': #
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
 
                 if self.stopRequested: #modified -ed
+                    self.current_state = 'stopping scan'
+                    ##self.sigUpdate.emit() #show state change 'stopping scan'
                     # close off the actual counter
                     cnt_err = self._counting_device.close_counter()
                     clk_err = self._counting_device.close_clock()
@@ -256,8 +258,10 @@ class M2LaserLogic(CounterLogic):
                         self.log.error('Could not even close the hardware, giving up.')
                     # switch the state variable off again
                     self.stopRequested = False #modified -ed
-                    self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan! TODO
-                    self.sigCounterUpdated.emit() #plot last data bits?
+                    self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan!
+                                                #does not matter, since the query loop side of things does not
+                                                #even use module_state.lock/unlock
+       #             self.sigCounterUpdated.emit() #plot last data bits?
                     return
 
                 #read the current wavelength value here as well, average with below val?
@@ -283,12 +287,7 @@ class M2LaserLogic(CounterLogic):
 
                 #Handle finished scan
                 if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
-                    #TODO combine with m2scanner.py start_clicked
-
- ###                   self.module_state.unlock()
- ###                   self.queryTimer.timeout.emit() #restart wavelength updates
                     self.sigScanComplete.emit()
-                    #should run self.check_laser_loop() #start wavelength non-scan query loop back
                     return
 
                 #handle data collected from scan
@@ -316,9 +315,6 @@ class M2LaserLogic(CounterLogic):
             #these two are essentially called in parallel (update gui and count_loop_body).
             #this is okay because they don't access the same resources. count_loop_body accesses raw_data
             #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
-                    #POTENTIAL ISSUE: if this calls itself, and if functions with signals that emit don't
-                    #return unless the signal's function has returned, this could be a potential memory issue!!
-                    #TODO LOOK AT FIX!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
             self.sigUpdate.emit() #connects to updateGui to update the wavelength
 

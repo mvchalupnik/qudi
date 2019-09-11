@@ -620,10 +620,15 @@ laser.stop_terascan("medium")"""
         self._send_websocket_request(
             '{"message_type":"task_request","task":["medium_scan_stop"]}')
         if sync:
-            ready = 0
-            while ready != -1:
-                ready = self.flush()
-            self.on_activate() #todo fix so on_activate isn't necessary
+           # ready = 0
+           # while ready != -1:
+           #     ready = self.flush() #waste of 5 seconds
+            while True:
+                try:
+                    self.on_activate() #todo fix so on_activate isn't necessary
+                    return
+                except:
+                    pass
             ##self.wait_for_report("scan_stitch_op")
 
     _web_scan_status_str = ['off', 'cont', 'single', 'flyback', 'on', 'fail']
