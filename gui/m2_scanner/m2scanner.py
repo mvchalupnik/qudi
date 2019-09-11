@@ -274,10 +274,23 @@ class M2ScannerGUI(GUIBase):
         self._mw.calcScanRes_disp.setText("{0:.3f} GHz/s \n{1:.3f} pm/s".format(scanrate*10**-9,scanrate_wvln*10**12))
 
         totaltime = numScans*rangeFreq/scanrate
+        secs = totaltime%60
+        mins = totaltime//60
+        hrs = mins//60
+        days = hrs//24
 
-        self._mw.calcTotalTime_disp.setText("{0:.0f} min, {1:.0f} sec".format(totaltime//60,totaltime%60))
+        if days > 0:
+            timestr = "{0:.0f} days, {1:.0f} hrs, {2:.0f} min, {3:.0f} sec".format(days, hrs, mins, secs)
+        elif hrs > 0:
+            timestr = "{0:.0f} hrs, {1:.0f} min, {2:.0f} sec".format(hrs, mins, secs)
+        elif mins > 0:
+            timestr = "{0:.0f} min, {1:.0f} sec".format( mins, secs)
+        else:
+            timestr = "{0:.0f} sec".format(secs)
 
-        #todo, if min > 60, show hrs. If hrs >24, show days
+        self._mw.calcTotalTime_disp.setText(timestr)
+
+
 
     #from laser.py gui
     @QtCore.Slot()
@@ -297,10 +310,12 @@ class M2ScannerGUI(GUIBase):
 
             print('STOP TERASCAN')
             #We need to make sure the counter stops before the laser check loop starts up again
-            #This code is safe. See comment below at EOF.
-            #TODO STILL COULD BE A PROBLEM!
+            #Should be okay because stop_terascan is set to sync, eg wait for terascan to fully stop
 
             self._mw.replot_pushButton.setEnabled(True)
+
+            self._mw.status_disp.setText('stopping scan') #is not being seen.?
+            ##self._laser_logic.current_state = 'stopping scan'
 
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
@@ -311,6 +326,9 @@ class M2ScannerGUI(GUIBase):
             self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
         else:
             print('START TERASCAN')
+            #self._laser_logic.current_state = 'starting scan'
+            self._mw.status_disp.setText('starting scan')
+
             self._mw.replot_pushButton.setEnabled(False)
             self._mw.run_scan_Action.setText('Stop counter')
 
