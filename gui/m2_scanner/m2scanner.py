@@ -307,20 +307,15 @@ class M2ScannerGUI(GUIBase):
 
             print('STOP TERASCAN')
             #We need to make sure the counter stops before the laser check loop starts up again
-            #using signals like this makes that ambiguous!
+            #This code is safe. See comment below at EOF.
 
             self._mw.replot_pushButton.setEnabled(True)
 
             self._mw.run_scan_Action.setText('Start counter')
-            self.sigStopCounter.emit() #Bypass this and just call stopCount to make sure things stop
-                                        #before terascan is started.
-            ##self._laser_logic.stopCount() #why wouldn't this just always be used in general, though? :(
-                                            #this seems to cause errors?
-
+            self.sigStopCounter.emit()
             #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
 
-            #potentially better way: call stop_terascan continuously, periodically sleeping for short periods of time
-            #in order to ensure that if the scan hadn't actually started yet, that stop_scan will be called???
+
             self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
             self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
         else:
@@ -374,3 +369,11 @@ class M2ScannerGUI(GUIBase):
     def scanComplete(self):
         self._mw.replot_pushButton.setEnabled(True)
         #todo: add more or combine into something else
+
+
+#https://doc.qt.io/qt-5/signalsandslots.html
+#When a signal is emitted, the slots connected to it are usually executed immediately, just like a normal
+# function call. When this happens, the signals and slots mechanism is totally independent of any GUI event loop.
+# Execution of the code following the emit statement will occur once all slots have returned. The situation
+# is slightly different when using queued connections; in such a case, the code following the emit keyword
+# will continue immediately, and the slots will be executed later.
