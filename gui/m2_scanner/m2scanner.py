@@ -119,6 +119,7 @@ class M2ScannerGUI(GUIBase):
         self._mw.scanRate_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.startWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
         self._mw.stopWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
+        self._mw.numScans_spinBox.valueChanged.connect(self.update_calculated_scan_params)
 
         self._mw.plotPoints_checkBox.stateChanged.connect(self.update_points_checkbox)
         self._mw.replot_pushButton.clicked.connect(self.replot_pressed)
@@ -213,22 +214,6 @@ class M2ScannerGUI(GUIBase):
             self._curve1.setData(x=data[0, :], y=data[1, :])
  #       print('updatedata finished in gui')
 
-      # if self._counting_logic.get_saving_state():
-        #     self._mw.record_counts_Action.setText('Save')
-        #     self._mw.count_freq_SpinBox.setEnabled(False)
-        #     self._mw.oversampling_SpinBox.setEnabled(False)
-        # else:
-        #     self._mw.record_counts_Action.setText('Start Saving Data')
-        #     self._mw.count_freq_SpinBox.setEnabled(True)
-        #     self._mw.oversampling_SpinBox.setEnabled(True)
-        #
-        # if self._counting_logic.module_state() == 'locked':
-        #     self._mw.start_counter_Action.setText('Stop counter')
-        #     self._mw.start_counter_Action.setChecked(True)
-        # else:
-        #     self._mw.start_counter_Action.setText('Start counter')
-        #     self._mw.start_counter_Action.setChecked(False)
-        # return 0
 
 
 
@@ -260,17 +245,18 @@ class M2ScannerGUI(GUIBase):
         startwvln = self._mw.startWvln_doubleSpinBox.value() * 10 ** -9  # in m
         stopwvln = self._mw.stopWvln_doubleSpinBox.value() * 10**-9 #in m
 
-#        print('get_scan_info finished in gui')
-        return startwvln, stopwvln, typebox, scanrate
+        numscans = self._mw.numScans_spinBox.value()
+
+        return startwvln, stopwvln, typebox, scanrate, numscans
 
 
     def update_calculated_scan_params(self):
         speed_c = 299792458 #speed of light in m/s
 
         try:
-            startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
         except:
-            return
+            return #error handling occurs inside get_scan_info
 
         midWvln = (stopWvln + startWvln)/2 #in m
         rangeWvln = (stopWvln - startWvln) #in m
@@ -284,9 +270,13 @@ class M2ScannerGUI(GUIBase):
         self._mw.calcDwellTime_disp.setText("0.2 sec \n{0:.4f} pm".format(0.2*scanrate_wvln*10**12))
                     #Scan resolution is 0.2 sec  (based on manually testing, with print
                     #and time.time() statements in countloop). May be different on a different computer
+
         self._mw.calcScanRes_disp.setText("{0:.3f} GHz/s \n{1:.3f} pm/s".format(scanrate*10**-9,scanrate_wvln*10**12))
-        totaltime = rangeFreq/scanrate
+
+        totaltime = numScans*rangeFreq/scanrate
+
         self._mw.calcTotalTime_disp.setText("{0:.0f} min, {1:.0f} sec".format(totaltime//60,totaltime%60))
+
         #todo, if min > 60, show hrs. If hrs >24, show days
 
     #from laser.py gui
@@ -308,6 +298,7 @@ class M2ScannerGUI(GUIBase):
             print('STOP TERASCAN')
             #We need to make sure the counter stops before the laser check loop starts up again
             #This code is safe. See comment below at EOF.
+            #TODO STILL COULD BE A PROBLEM!
 
             self._mw.replot_pushButton.setEnabled(True)
 
@@ -324,7 +315,7 @@ class M2ScannerGUI(GUIBase):
             self._mw.run_scan_Action.setText('Stop counter')
 
             # Adding:
-            startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
 
             # Check for input parameter errors. E.G., stop_wavelength should be less than start_wavelength
             if startWvln >= stopWvln:
@@ -339,12 +330,14 @@ class M2ScannerGUI(GUIBase):
             ####JUST ADDED
             self._laser_logic.stop_query_loop() #careful with this todo look at
 
-            self._laser_logic.start_terascan("medium", (750, 751), 10E9) #start terascan
+            self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            self.sigStartCounter.emit()
 
-            self.sigStartCounter.emit() #start counter, if you follow it long enough it connects to count_loop_body in m2_laser_logic
 
 #        print('start_clicked finished in gui')
         return self._laser_logic.module_state()
+
+
 
     def update_points_checkbox(self):
         #check if locked?
@@ -367,8 +360,27 @@ class M2ScannerGUI(GUIBase):
             self.update_data()
 
     def scanComplete(self):
-        self._mw.replot_pushButton.setEnabled(True)
-        #todo: add more or combine into something else
+        startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+
+        #don't automatically save if it's just one scan
+        if numScans != 1:
+            #save scan
+            #saving increases repetition_count by 1
+            self._laser_logic.save_spectrum_data()
+
+        if numScans == self._laser_logic.repetition_count or self._laser_logic.repetition_count == 0:
+
+            self._laser_logic.repetition_count = 0
+
+            self._mw.replot_pushButton.setEnabled(True)
+
+            self._laser_logic.module_state.unlock()
+            self._laser_logic.queryTimer.timeout.emit() #restart wavelength updates
+        else:
+            self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+
+            self._laser_logic.module_state.unlock()
+            self.sigStartCounter.emit() #clears out data, etc.
 
 
 #https://doc.qt.io/qt-5/signalsandslots.html
@@ -377,3 +389,6 @@ class M2ScannerGUI(GUIBase):
 # Execution of the code following the emit statement will occur once all slots have returned. The situation
 # is slightly different when using queued connections; in such a case, the code following the emit keyword
 # will continue immediately, and the slots will be executed later.
+
+#Seems wrong??? sigStartQueryLoop is connected NOT through a queued connection and the function doesn't wait
+#for the slots to complete. "slot returning" must just mean that the slot has begun executing???

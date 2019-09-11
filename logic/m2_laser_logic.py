@@ -284,10 +284,9 @@ class M2LaserLogic(CounterLogic):
                 #Handle finished scan
                 if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
                     #TODO combine with m2scanner.py start_clicked
-                    ###self.stopRequested = True #todo try uncomenting
-                    self.module_state.unlock()
-                    self.queryTimer.timeout.emit()
 
+ ###                   self.module_state.unlock()
+ ###                   self.queryTimer.timeout.emit() #restart wavelength updates
                     self.sigScanComplete.emit()
                     #should run self.check_laser_loop() #start wavelength non-scan query loop back
                     return
@@ -317,6 +316,9 @@ class M2LaserLogic(CounterLogic):
             #these two are essentially called in parallel (update gui and count_loop_body).
             #this is okay because they don't access the same resources. count_loop_body accesses raw_data
             #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
+                    #POTENTIAL ISSUE: if this calls itself, and if functions with signals that emit don't
+                    #return unless the signal's function has returned, this could be a potential memory issue!!
+                    #TODO LOOK AT FIX!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
             self.sigUpdate.emit() #connects to updateGui to update the wavelength
 
@@ -504,4 +506,5 @@ class M2LaserLogic(CounterLogic):
         temp = np.transpose(self.countdata)
         temp = temp[temp[:, 0].argsort()]
         self.countdata = np.transpose(temp)
-        print(self.countdata)
+
+
