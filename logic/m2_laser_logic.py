@@ -179,7 +179,7 @@ class M2LaserLogic(CounterLogic):
     #This is adapted from original laser_logic
     @QtCore.Slot()
     def check_laser_loop(self):
-  #      print('check_laser_loop called in logic')
+        print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
         if self.stopRequest: #no -ed
             if self.module_state.can('stop'):
@@ -199,7 +199,7 @@ class M2LaserLogic(CounterLogic):
 
         self.queryTimer.start(qi)
         self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
- #       print('check_laser_loop finished in logic')
+        print('check_laser_loop finished in logic')
 
 
     @QtCore.Slot()
@@ -212,7 +212,7 @@ class M2LaserLogic(CounterLogic):
 
     @QtCore.Slot()
     def stop_query_loop(self):
-  #      print('stop_query_loop called in logic')
+        print('stop_query_loop called in logic')
         """ Stop the readout loop. """
         self.stopRequest = True #no -ed
         for i in range(10):
@@ -220,7 +220,7 @@ class M2LaserLogic(CounterLogic):
                 return
             QtCore.QCoreApplication.processEvents() #?
             time.sleep(self.queryInterval/1000)
- #       print('stop_query_loop finished in logic')
+        print('stop_query_loop finished in logic')
 
     def init_data_logging(self): #todo: delete?
         """ Zero all log buffers. """
@@ -243,7 +243,7 @@ class M2LaserLogic(CounterLogic):
 
         #odmr_logic flips the two statements below! in _scan_odmr_line
         #todo figure out which is best
-       # print('count_loop_body runs')
+        print('count_loop_body runs')
         if self.module_state() == 'locked': #
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
@@ -282,11 +282,13 @@ class M2LaserLogic(CounterLogic):
 
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
+                    print('stitching')
                     self.sigCountDataNext.emit()
                     return
 
                 #Handle finished scan
                 if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
+                    print('complete')
                     self.sigScanComplete.emit()
                     return
 
@@ -317,7 +319,7 @@ class M2LaserLogic(CounterLogic):
             #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
 
             self.sigUpdate.emit() #connects to updateGui to update the wavelength
-
+            print('count_loop_body ended')
         return
 
 
@@ -373,7 +375,7 @@ class M2LaserLogic(CounterLogic):
     def start_terascan(self,scantype, scanbounds, scanrate): #added, possibly/probably unecessary - could do straight in gui.
         #but maybe we don't want the gui talking directly to hardware?
  #       print('start_terascan called in logic')
-        self._laser.setup_terascan(scantype, scanbounds, scanrate)
+        self._laser.setup_terascan(scantype, tuple([1E9*x for x in scanbounds]), scanrate)
         self._laser.start_terascan(scantype)
  #       print('start terascan finished in logic')
         return

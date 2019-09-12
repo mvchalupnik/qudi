@@ -364,7 +364,7 @@ laser.stop_terascan("medium")"""
         if timeouted == -1: #timeout or some other error in flush()
             #assume this means the scan is done, even though there are other possible reasons for this to occur
             #(eg. bad connection)
-            print('Terascan complete')
+            print('Timeout in get_terascan_wavelength')
             return -1, 'complete'
 
         out = self.get_laser_state()

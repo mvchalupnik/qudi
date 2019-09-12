@@ -248,7 +248,7 @@ class M2ScannerGUI(GUIBase):
 
         numscans = self._mw.numScans_spinBox.value()
 
-        return startwvln, stopwvln, typebox, scanrate, numscans
+        return startwvln, stopwvln, typebox.lower(), scanrate, numscans
 
 
     def update_calculated_scan_params(self):
@@ -319,9 +319,10 @@ class M2ScannerGUI(GUIBase):
 
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
-            #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
 
-            self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
+            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+            self._laser_logic._laser.stop_terascan(scantype, True) #
+
             self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
         else:
             print('START TERASCAN')
@@ -347,7 +348,8 @@ class M2ScannerGUI(GUIBase):
             ####JUST ADDED
             self._laser_logic.stop_query_loop() #careful with this todo look at
 
-            self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            #self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
             self.sigStartCounter.emit()
 
 
@@ -394,7 +396,8 @@ class M2ScannerGUI(GUIBase):
             self._laser_logic.module_state.unlock()
             self._laser_logic.queryTimer.timeout.emit() #restart wavelength updates
         else:
-            self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            #self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
 
             self._laser_logic.module_state.unlock()
             self.sigStartCounter.emit() #clears out data, etc.
