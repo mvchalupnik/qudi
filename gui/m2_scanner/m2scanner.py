@@ -19,6 +19,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 """
 
+import time
 import os
 import pyqtgraph as pg
 import numpy as np
@@ -40,7 +41,7 @@ class M2ControllerWindow(QtWidgets.QMainWindow):
         """
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'ui_m2scanner.ui') #modified
+        ui_file = os.path.join(this_dir, 'ui_m2scanner_new2.ui') #modified
 
         # Load it
         super().__init__()
@@ -66,21 +67,41 @@ class M2ScannerGUI(GUIBase):
         """ Definition and initialisation of the GUI.
         """
 
+        #Connect to laser_logic
         self._laser_logic = self.laserlogic()
 
         # setting up the window
         self._mw = M2ControllerWindow()
 
 
-        #Connect to laser_logic to GUI action
-        self._laser_logic.sigUpdate.connect(self.updateGui)
+        ###################
+        # Connect Signals
+        ###################
 
-        #connect GUI signals to laser logic action
+        self._mw.run_scan_Action.triggered.connect(self.start_clicked)  # start_clicked then triggers sigStartCounter
+        self._mw.save_scan_Action.triggered.connect(self.save_spectrum_data)  # start_clicked then triggers sigStartCounter
+
+        #       self._mw.save_scan_Action.triggered.connect(self.save_clicked) #there is no save_clicked function
+        # self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
+        #      self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
+
+        # FROM countergui.py
+        # Connect signals for counter
         self.sigStartCounter.connect(self._laser_logic.startCount)
         self.sigStopCounter.connect(self._laser_logic.stopCount)
+        self._laser_logic.sigScanComplete.connect(self.scanComplete) #just added
+
+        # Handling signals from the logic
+        #   signals during terascan
+        self._laser_logic.sigCounterUpdated.connect(self.update_data)
+        #   signals not during terascans
+        self._laser_logic.sigUpdate.connect(self.updateGui)
 
 
+        ####################
         #set up GUI
+        ####################
+
         self._mw.scanType_comboBox.setInsertPolicy = 6  # InsertAlphabetically
         self._mw.scanType_comboBox.addItem("Fine")
         self._mw.scanType_comboBox.addItem("Medium")
@@ -90,25 +111,22 @@ class M2ScannerGUI(GUIBase):
             self._mw.scanRate_comboBox.addItem(str(x))
 
 
+
         #####################
         # Connecting user interactions
-        self._mw.run_scan_Action.triggered.connect(self.start_clicked)
- #       self._mw.save_scan_Action.triggered.connect(self.save_clicked)
+        ########################
 
         self._mw.scanType_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.scanRate_comboBox.currentIndexChanged.connect(self.update_calculated_scan_params)
         self._mw.startWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
         self._mw.stopWvln_doubleSpinBox.valueChanged.connect(self.update_calculated_scan_params)
+        self._mw.numScans_spinBox.valueChanged.connect(self.update_calculated_scan_params)
 
-        self.update_calculated_scan_params() #initialize
+        self._mw.plotPoints_checkBox.stateChanged.connect(self.update_points_checkbox)
+        self._mw.replot_pushButton.clicked.connect(self.replot_pressed)
 
-
-    #    self._mw.stop_diff_spec_Action.setEnabled(False)
-    #    self._mw.resume_diff_spec_Action.setEnabled(False)
-    #    self._mw.correct_background_Action.setChecked(self._spectrum_logic.background_correction)
-
-        # giving the plots names allows us to link their axes together
-        self._pw = self._mw.plotWidget  # pg.PlotWidget(name='Counter1')
+        #below from countergui.py
+        self._pw = self._mw.plotWidget
         self._plot_item = self._pw.plotItem
 
         # create a new ViewBox, link the right axis to its coordinate system
@@ -128,56 +146,50 @@ class M2ScannerGUI(GUIBase):
 
 
         self._pw.setLabel('left', 'Count Rate', units='counts/s')
-  ##      self._pw.setLabel('right', 'Counts', units='#') #TODO get rid of or implement
+        ##self._pw.setLabel('right', 'Counts', units='#') #TODO get rid of or implement
         self._pw.setLabel('bottom', 'Wavelength', units='nm')
-  ##      self._pw.setLabel('top', 'Relative Frequency', units='Hz') #TODO implement
-    #
+        ##self._pw.setLabel('top', 'Relative Frequency', units='Hz') #TODO implement
+
          # Create an empty plot curve to be filled later, set its pen
         self._curve1 = self._pw.plot()
         self._curve1.setPen(palette.c1, width=2)
-    #
-    #     self._curve2 = self._pw.plot()
-    #     self._curve2.setPen(palette.c2, width=2)
-    #
-        self.update_data()
-    #
-    #     # Connect singals
-    #     self._mw.rec_single_spectrum_Action.triggered.connect(self.record_single_spectrum)
-    #     self._mw.start_diff_spec_Action.triggered.connect(self.start_differential_measurement)
-    #     self._mw.stop_diff_spec_Action.triggered.connect(self.stop_differential_measurement)
-    #     self._mw.resume_diff_spec_Action.triggered.connect(self.resume_differential_measurement)
-    #
-    #     self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
-    #     self._mw.correct_background_Action.triggered.connect(self.correct_background)
-    #     self._mw.acquire_background_Action.triggered.connect(self.acquire_background)
-    #     self._mw.save_background_Action.triggered.connect(self.save_background_data)
-    #
-    #     self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
-    #
 
-    #
+        #self._curve1 = pg.PlotDataItem(
+        #        pen=pg.mkPen(palette.c3, style=QtCore.Qt.DotLine),
+        #        symbol='s',
+        #        symbolPen=palette.c3,
+        #        symbolBrush=palette.c3,
+        #        symbolSize=5)
+        self._pw.addItem(self._curve1)
+
+        #initialize starting values
+        self.update_calculated_scan_params()  # initialize
+
+        #show the main gui
         self._mw.show()
-    #
-        #FROM countergui.py
-        #####################
-        # starting the physical measurement
-        self.sigStartCounter.connect(self._laser_logic.startCount)
-        self.sigStopCounter.connect(self._laser_logic.stopCount)
-
-        ##################
-        # Handling signals from the logic
-
-        self._laser_logic.sigCounterUpdated.connect(self.update_data)
 
     def on_deactivate(self):
         """ Deinitialisation performed during deactivation of the module.
         """
-        # disconnect signals
+        # disconnect signals #I think this will be unnecessary given that only the gui,
+        #not hardware or logic modules will deactivate when deactivate button is pressed
+        #(modeled after previously existing Laser module)
 #        self._fsd.sigFitsUpdated.disconnect()
+
         print('in gui trying to deactivate')
         self._mw.close()
-#        self._laser_logic.on_deactivate() #problem when gui is closed, it's not actually deactivating :(
-#        self._laser_logic._laser.on_deactivate()
+
+        #if a terascan is running, stop the terascan before deactivating
+        if self._laser_logic.module_state() == 'locked':
+            print('Terascan is running. Trying to stop now!')
+            self._mw.run_scan_Action.setText('Start counter')
+            self.sigStopCounter.emit()
+
+            #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+            self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
+            self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
+
+
 
     def show(self):
         """Make window visible and put it above all other windows.
@@ -187,214 +199,65 @@ class M2ScannerGUI(GUIBase):
         self._mw.raise_()
 
     def update_data(self):
-        """ The function that grabs the data and sends it to the plot.
+        """ The function that grabs the terascan count data and sends it to the plot.
         """
+#        print('update_data called in gui')
         ################ Adapted from spectrometer gui
         data = self._laser_logic.countdata
 
         #Don't plot initialization 0's
-        mask = (data==0).all(0) #returns array of booleans
+        mask = (data==0).all(0)
         start_idx = np.argmax(~mask)
         data = data[:,start_idx:]
 
         # draw new data
         if data.shape[1] > 0:
             self._curve1.setData(x=data[0, :], y=data[1, :])
-
-
-        ##########From countergui:
-
-        # if self._counting_logic.module_state() == 'locked':
-        #     if 0 < self._counting_logic.countdata_smoothed[(self._display_trace-1), -1] < 10:
-        #         self._mw.count_value_Label.setText(
-        #             '{0:,.6f}'.format(self._counting_logic.countdata_smoothed[(self._display_trace-1), -1]))
-        #     else:
-        #         self._mw.count_value_Label.setText(
-        #             '{0:,.0f}'.format(self._counting_logic.countdata_smoothed[(self._display_trace-1), -1]))
-        #
-        #     x_vals = (
-        #         np.arange(0, self._counting_logic.get_count_length())
-        #         / self._counting_logic.get_count_frequency())
-        #
-        #     ymax = -1
-        #     ymin = 2000000000
-        #     for i, ch in enumerate(self._counting_logic.get_channels()):
-        #         self.curves[2 * i].setData(y=self._counting_logic.countdata[i], x=x_vals)
-        #         self.curves[2 * i + 1].setData(y=self._counting_logic.countdata_smoothed[i],
-        #                                        x=x_vals
-        #                                        )
-        #         if ymax < self._counting_logic.countdata[i].max() and self._trace_selection[i]:
-        #             ymax = self._counting_logic.countdata[i].max()
-        #         if ymin > self._counting_logic.countdata[i].min() and self._trace_selection[i]:
-        #             ymin = self._counting_logic.countdata[i].min()
-        #
-        #     if ymin == ymax:
-        #         ymax += 0.1
-        #     self._pw.setYRange(0.95*ymin, 1.05*ymax)
-        #
-        # if self._counting_logic.get_saving_state():
-        #     self._mw.record_counts_Action.setText('Save')
-        #     self._mw.count_freq_SpinBox.setEnabled(False)
-        #     self._mw.oversampling_SpinBox.setEnabled(False)
-        # else:
-        #     self._mw.record_counts_Action.setText('Start Saving Data')
-        #     self._mw.count_freq_SpinBox.setEnabled(True)
-        #     self._mw.oversampling_SpinBox.setEnabled(True)
-        #
-        # if self._counting_logic.module_state() == 'locked':
-        #     self._mw.start_counter_Action.setText('Stop counter')
-        #     self._mw.start_counter_Action.setChecked(True)
-        # else:
-        #     self._mw.start_counter_Action.setText('Start counter')
-        #     self._mw.start_counter_Action.setChecked(False)
-        # return 0
+ #       print('updatedata finished in gui')
 
 
 
 
+    def save_spectrum_data(self):
+        self._laser_logic.save_spectrum_data()
 
-
-
-
-
-
-    # def update_fit(self, fit_data, result_str_dict, current_fit):
-    #     """ Update the drawn fit curve and displayed fit results.
-    #     """
-    #     if current_fit != 'No Fit':
-    #         # display results as formatted text
-    #         self._mw.spectrum_fit_results_DisplayWidget.clear()
-    #         try:
-    #             formated_results = units.create_formatted_output(result_str_dict)
-    #         except:
-    #             formated_results = 'this fit does not return formatted results'
-    #         self._mw.spectrum_fit_results_DisplayWidget.setPlainText(formated_results)
-    #
-    #         # redraw the fit curve in the GUI plot.
-    #         self._curve2.setData(x=fit_data[0, :], y=fit_data[1, :])
-    #
-    # def record_single_spectrum(self):
-    #     """ Handle resume of the scanning without resetting the data.
-    #     """
-    #     self._spectrum_logic.get_single_spectrum()
-    #
-    # def start_differential_measurement(self):
-    #
-    #     # Change enabling of GUI actions
-    #     self._mw.stop_diff_spec_Action.setEnabled(True)
-    #     self._mw.start_diff_spec_Action.setEnabled(False)
-    #     self._mw.rec_single_spectrum_Action.setEnabled(False)
-    #     self._mw.resume_diff_spec_Action.setEnabled(False)
-    #
-    #     self._spectrum_logic.start_differential_spectrum()
-    #
-    # def stop_differential_measurement(self):
-    #     self._spectrum_logic.stop_differential_spectrum()
-    #
-    #     # Change enabling of GUI actions
-    #     self._mw.stop_diff_spec_Action.setEnabled(False)
-    #     self._mw.start_diff_spec_Action.setEnabled(True)
-    #     self._mw.rec_single_spectrum_Action.setEnabled(True)
-    #     self._mw.resume_diff_spec_Action.setEnabled(True)
-    #
-    # def resume_differential_measurement(self):
-    #     self._spectrum_logic.resume_differential_spectrum()
-    #
-    #     # Change enabling of GUI actions
-    #     self._mw.stop_diff_spec_Action.setEnabled(True)
-    #     self._mw.start_diff_spec_Action.setEnabled(False)
-    #     self._mw.rec_single_spectrum_Action.setEnabled(False)
-    #     self._mw.resume_diff_spec_Action.setEnabled(False)
-    #
-    # def save_spectrum_data(self):
-    #     self._spectrum_logic.save_spectrum_data()
-    #
-    # def correct_background(self):
-    #     self._spectrum_logic.background_correction = self._mw.correct_background_Action.isChecked()
-    #
-    # def acquire_background(self):
-    #     self._spectrum_logic.get_single_spectrum(background=True)
-    #
-    # def save_background_data(self):
-    #     self._spectrum_logic.save_spectrum_data(background=True)
-    #
-    # def do_fit(self):
-    #     """ Command spectrum logic to do the fit with the chosen fit function.
-    #     """
-    #     fit_function = self._mw.fit_methods_ComboBox.getCurrentFit()[0]
-    #     self._spectrum_logic.do_fit(fit_function)
-    #
-    # def set_fit_domain(self):
-    #     """ Set the fit domain in the spectrum logic to values given by the GUI spinboxes.
-    #     """
-    #     lambda_min = self._mw.fit_domain_min_doubleSpinBox.value()
-    #     lambda_max = self._mw.fit_domain_max_doubleSpinBox.value()
-    #
-    #     new_fit_domain = np.array([lambda_min, lambda_max])
-    #
-    #     self._spectrum_logic.set_fit_domain(new_fit_domain)
-    #
-    # def reset_fit_domain_all_data(self):
-    #     """ Reset the fit domain to match the full data set.
-    #     """
-    #     self._spectrum_logic.set_fit_domain()
-    #
-    # def update_fit_domain(self, domain):
-    #     """ Update the displayed fit domain to new values (set elsewhere).
-    #     """
-    #     self._mw.fit_domain_min_doubleSpinBox.setValue(domain[0])
-    #     self._mw.fit_domain_max_doubleSpinBox.setValue(domain[1])
-    #
-    # def restore_default_view(self):
-    #     """ Restore the arrangement of DockWidgets to the default
-    #     """
-    #     # Show any hidden dock widgets
-    #     self._mw.spectrum_fit_dockWidget.show()
-    #
-    #     # re-dock any floating dock widgets
-    #     self._mw.spectrum_fit_dockWidget.setFloating(False)
-    #
-    #     # Arrange docks widgets
-    #     self._mw.addDockWidget(QtCore.Qt.DockWidgetArea(QtCore.Qt.TopDockWidgetArea),
-    #                            self._mw.spectrum_fit_dockWidget
-    #                            )
-    #
-    #     # Set the toolbar to its initial top area
-    #     self._mw.addToolBar(QtCore.Qt.TopToolBarArea,
-    #                         self._mw.measure_ToolBar)
-    #     self._mw.addToolBar(QtCore.Qt.TopToolBarArea,
-    #                         self._mw.background_ToolBar)
-    #     self._mw.addToolBar(QtCore.Qt.TopToolBarArea,
-    #                         self._mw.differential_ToolBar)
-    #     return 0
-
-    #wavemeter gui did not use QtCore.Slots (??)
 
     def get_scan_info(self):
-        finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001]  # in GHz/s #TODO: Move?
-        mediumrates = [100, 50, 20, 15, 10, 5, 2, 1]  # in GHz/s #TODO: Move?
+#        print('get_scan_info called in gui')
+        finerates = [20, 10, 5, 2, 1, .5, .2, .1, .05, .02, .01, .005, .002, .001]  # in GHz/s
+        mediumrates = [100, 50, 20, 15, 10, 5, 2, 1]  # in GHz/s
 
         typebox = self._mw.scanType_comboBox.currentText()
         if typebox== 'Fine':
             scanrate = finerates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
         else:
-            # TODO error handling if index is too high for medium
-            scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
+            indx = int(self._mw.scanRate_comboBox.currentText())
+            #handle if index is too high for medium scan
+            if indx >= len(mediumrates):
+                error_dialog = QtWidgets.QErrorMessage()
+                error_dialog.showMessage('ERROR: index given for medium rates is too high')
+                error_dialog.exec()
+                self._mw.scanRate_comboBox.setCurrentIndex(7)
+                return #how is this not broken??
+                #alternatively (Todo?) change number of scanRate options based on whether we are on Fine or Medium
+            else:
+                scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
 
-        #TODO handle in case startwavlength is greater than or equal to stopwavlength
-        #requires memory of previous value
-        #OR better, can actually prevent change from occurring by DISABLING???? TODO look into!!!
-        #this may end up being rewritten, but oh well
         startwvln = self._mw.startWvln_doubleSpinBox.value() * 10 ** -9  # in m
         stopwvln = self._mw.stopWvln_doubleSpinBox.value() * 10**-9 #in m
 
-        return startwvln, stopwvln, typebox, scanrate
+        numscans = self._mw.numScans_spinBox.value()
+
+        return startwvln, stopwvln, typebox.lower(), scanrate, numscans
+
 
     def update_calculated_scan_params(self):
         speed_c = 299792458 #speed of light in m/s
 
-        startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
-
+        try:
+            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+        except:
+            return #error handling occurs inside get_scan_info
 
         midWvln = (stopWvln + startWvln)/2 #in m
         rangeWvln = (stopWvln - startWvln) #in m
@@ -405,46 +268,79 @@ class M2ScannerGUI(GUIBase):
         rangeFreq = stopFreq - startFreq #in Hz
         scanrate_wvln = scanrate * speed_c/(midFreq**2) #in m/s
 
+        self._mw.calcDwellTime_disp.setText("0.2 sec \n{0:.4f} pm".format(0.2*scanrate_wvln*10**12))
+                    #Scan resolution is 0.2 sec  (based on manually testing, with print
+                    #and time.time() statements in countloop). May be different on a different computer
 
-        self._mw.calcDwellTime_disp.setText('Hi') #Dwell time is related to how the counts get plotted. It is not
-                                                #a property of the laser, but gets used for interpreting counts
         self._mw.calcScanRes_disp.setText("{0:.3f} GHz/s \n{1:.3f} pm/s".format(scanrate*10**-9,scanrate_wvln*10**12))
-        totaltime = rangeFreq/scanrate
-        self._mw.calcTotalTime_disp.setText("{0:.0f} min, {1:.0f} sec".format(totaltime//60,totaltime%60))
+
+        totaltime = numScans*rangeFreq/scanrate
+        secs = totaltime%60
+        mins = totaltime//60
+        hrs = mins//60
+        days = hrs//24
+
+        if days > 0:
+            timestr = "{0:.0f} days, {1:.0f} hrs, {2:.0f} min, {3:.0f} sec".format(days, hrs, mins, secs)
+        elif hrs > 0:
+            timestr = "{0:.0f} hrs, {1:.0f} min, {2:.0f} sec".format(hrs, mins, secs)
+        elif mins > 0:
+            timestr = "{0:.0f} min, {1:.0f} sec".format( mins, secs)
+        else:
+            timestr = "{0:.0f} sec".format(secs)
+
+        self._mw.calcTotalTime_disp.setText(timestr)
+
 
 
     #from laser.py gui
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
-
-        #TODO throw error if startwavelength > stopwavlength
-        #OR? do this in update_calcualated_scan_params???
-        #TODO don't throw an error, but just don't allow the action to occur (eg don't update gui and laser to reflect it)
-
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
-
+        self._mw.status_disp.setText(self._laser_logic.current_state)
 #        self.updateButtonsEnabled()
+ #       print('updateGui finished in gui')
 
-
-    def start_clicked(self):
+    def start_clicked(self): #todo: move the logic elements of this function to the logic module
         """ Handling the Start button to stop and restart the counter.
         """
+#        print('start_clicked called in gui')
         if self._laser_logic.module_state() == 'locked':
+
             print('STOP TERASCAN')
+            #We need to make sure the counter stops before the laser check loop starts up again
+            #Should be okay because stop_terascan is set to sync, eg wait for terascan to fully stop
+
+            self._mw.replot_pushButton.setEnabled(True)
+
+            self._mw.status_disp.setText('stopping scan') #is not being seen.?
+            self._laser_logic.current_state = 'stopping scan'
+
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
 
-            #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
-            self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
-            self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
+            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+            self._laser_logic._laser.stop_terascan(scantype, True) #
 
+            self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
         else:
             print('START TERASCAN')
+            #self._laser_logic.current_state = 'starting scan'
+            self._mw.status_disp.setText('starting scan')
+
+            self._mw.replot_pushButton.setEnabled(False)
             self._mw.run_scan_Action.setText('Stop counter')
 
             # Adding:
-            startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
+            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+
+            # Check for input parameter errors. E.G., stop_wavelength should be less than start_wavelength
+            if startWvln >= stopWvln:
+                error_dialog = QtWidgets.QErrorMessage()
+                error_dialog.showMessage('ERROR: start wavelength must be less than stop wavelength')
+                error_dialog.exec()
+                return self._laser_logic.module_state()
 
             #            self._laser_logic.setup_terascan(scantype,(startWvln, stopWvln), scanrate)
             #            self._laser_logic.start_terascan(scantype)
@@ -452,8 +348,67 @@ class M2ScannerGUI(GUIBase):
             ####JUST ADDED
             self._laser_logic.stop_query_loop() #careful with this todo look at
 
-            self._laser_logic.start_terascan("medium", (750, 751), 10E9) #start terascan
+            #self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
+            self.sigStartCounter.emit()
 
-            self.sigStartCounter.emit() #start counter, if you follow it long enough it connects to count_loop_body in m2_laser_logic
 
+#        print('start_clicked finished in gui')
         return self._laser_logic.module_state()
+
+
+
+    def update_points_checkbox(self):
+        #check if locked?
+        if not self._mw.plotPoints_checkBox.isChecked():
+            self._curve1.setPen(palette.c1, width=2)
+            self._curve1.setSymbol(None)
+        else:
+            self._curve1.setPen(palette.c3, style=QtCore.Qt.DotLine)
+            self._curve1.setSymbol('s')
+            self._curve1.setSymbolBrush(palette.c3)
+            self._curve1.setSymbolSize(5)
+            self._curve1.setSymbolPen(palette.c3)
+        #self._pw.addItem(self._curve1)
+
+    def replot_pressed(self):
+        if self._laser_logic.module_state() == 'locked':
+            pass #Button should be disabled when module_state is locked, so this should never happen anyway
+        else:
+            self._laser_logic.order_data()
+            self.update_data()
+
+    def scanComplete(self):
+        startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+
+        #don't automatically save if it's just one scan
+        if numScans != 1:
+            #save scan
+            #saving increases repetition_count by 1
+            self._laser_logic.save_spectrum_data()
+
+        if numScans == self._laser_logic.repetition_count or self._laser_logic.repetition_count == 0:
+
+            self._laser_logic.repetition_count = 0
+
+            self._mw.replot_pushButton.setEnabled(True)
+
+            self._laser_logic.module_state.unlock()
+            self._laser_logic.queryTimer.timeout.emit() #restart wavelength updates
+        else:
+            #self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
+
+            self._laser_logic.module_state.unlock()
+            self.sigStartCounter.emit() #clears out data, etc.
+
+
+#https://doc.qt.io/qt-5/signalsandslots.html
+#When a signal is emitted, the slots connected to it are usually executed immediately, just like a normal
+# function call. When this happens, the signals and slots mechanism is totally independent of any GUI event loop.
+# Execution of the code following the emit statement will occur once all slots have returned. The situation
+# is slightly different when using queued connections; in such a case, the code following the emit keyword
+# will continue immediately, and the slots will be executed later.
+
+#Seems wrong??? sigStartQueryLoop is connected NOT through a queued connection and the function doesn't wait
+#for the slots to complete. "slot returning" must just mean that the slot has begun executing???

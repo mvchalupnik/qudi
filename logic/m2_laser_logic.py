@@ -61,23 +61,23 @@ class M2LaserLogic(CounterLogic):
     queryInterval = ConfigOption('query_interval', 100) #needed for wavemeter
 
     sigUpdate = QtCore.Signal()
-
     sigStartScan = QtCore.Signal() #Just added
 
   ######  wavelength = 0 #JUST ADDED
 
     #############    Adapted from CounterLogic
-    ##TODO get rid of unnecessary signals here
     sigCounterUpdated = QtCore.Signal()
     sigCountDataNext = QtCore.Signal()
-    sigGatedCounterFinished = QtCore.Signal()
-    sigGatedCounterContinue = QtCore.Signal(bool)
-    sigCountingSamplesChanged = QtCore.Signal(int)
-    sigCountLengthChanged = QtCore.Signal(int)
-    sigCountFrequencyChanged = QtCore.Signal(float)
-    sigSavingStatusChanged = QtCore.Signal(bool)
-    sigCountStatusChanged = QtCore.Signal(bool)
-    sigCountingModeChanged = QtCore.Signal(CountingMode)
+    #To be deleted: signals below
+  #  sigGatedCounterFinished = QtCore.Signal()
+  #  sigGatedCounterContinue = QtCore.Signal(bool)
+  #  sigCountingSamplesChanged = QtCore.Signal(int)
+  #  sigCountLengthChanged = QtCore.Signal(int)
+  #  sigCountFrequencyChanged = QtCore.Signal(float)
+  #  sigSavingStatusChanged = QtCore.Signal(bool)
+  #  sigCountStatusChanged = QtCore.Signal(bool)
+  #  sigCountingModeChanged = QtCore.Signal(CountingMode)
+    sigScanComplete = QtCore.Signal() #JUST ADDED, may be unnecessary
 
     ## declare connectors
     counter1 = Connector(interface='SlowCounterInterface')
@@ -94,9 +94,9 @@ class M2LaserLogic(CounterLogic):
     def on_activate(self):
         ############## Counter related on_activate tasks:
         # Connect to hardware and save logic
-        print('on_activate is called')
+        print('on_activate is called in m2_laser_logic')
         self._counting_device = self.counter1()
-       #### self._save_logic = self.savelogic()
+        self._save_logic = self.savelogic()
 
         # Recall saved app-parameters
         if 'counting_mode' in self._statusVariables:
@@ -105,8 +105,14 @@ class M2LaserLogic(CounterLogic):
         constraints = self.get_hardware_constraints()
         number_of_detectors = constraints.max_detectors
 
+        #initialize repetition count
+        self.repetition_count = 0
+
+        #initialize current count
+        self.integrated_counts = 0
+
         # initialize data arrays
-        self.countdata = np.zeros([len(self.get_channels()), self._count_length])
+        self.countdata = np.zeros([len(self.get_channels()), self._count_length])#TODO are some of these unused/can be deleted?
         self.countdata_smoothed = np.zeros([len(self.get_channels()), self._count_length])
         self.rawdata = np.zeros([len(self.get_channels()), self._counting_samples])
         self._already_counted_samples = 0  # For gated counting
@@ -141,7 +147,7 @@ class M2LaserLogic(CounterLogic):
         self.current_wavelength = self._laser.get_wavelength()
 
 
-        self.init_data_logging() #currently is doing nothing, TODO fix
+     #   self.init_data_logging() #currently is doing nothing, TODO delete
         self.start_query_loop() #why put this here also?
 
 
@@ -168,10 +174,12 @@ class M2LaserLogic(CounterLogic):
             QtCore.QCoreApplication.processEvents()
 
 
+
     #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
     #This is adapted from original laser_logic
     @QtCore.Slot()
     def check_laser_loop(self):
+        print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
         if self.stopRequest: #no -ed
             if self.module_state.can('stop'):
@@ -181,24 +189,34 @@ class M2LaserLogic(CounterLogic):
         qi = self.queryInterval
         try:
             #print('laserloop', QtCore.QThread.currentThreadId())
-            self.current_wavelength = self._laser.get_wavelength() #todo uncomment fix
+            self.current_wavelength = self._laser.get_wavelength()
+            self.current_state = 'idle'
             pass
 
         except:
-            qi = 3000
-            self.log.exception("Exception in laser status loop, throttling refresh rate.")
+            print('in check_laser_loop exception')
+            #qi = 3000
+            #self.log.exception("Exception in laser status loop, throttling refresh rate.")
+            return #this improved stability, and somehow didn't stop check_laser_loop
+                #from working... not sure what to make of that... does SingleShot not work?
+                #maybe while testing I haven't actually accessed this?
 
         self.queryTimer.start(qi)
         self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
+        print('check_laser_loop finished in logic')
+
 
     @QtCore.Slot()
     def start_query_loop(self):
         """ Start the readout loop. """
+ #       print('start_query_loop called in logic')
         self.module_state.run()
         self.queryTimer.start(self.queryInterval)
+ #       print('start_query_loop finished in logic')
 
     @QtCore.Slot()
     def stop_query_loop(self):
+        print('stop_query_loop called in logic')
         """ Stop the readout loop. """
         self.stopRequest = True #no -ed
         for i in range(10):
@@ -206,8 +224,9 @@ class M2LaserLogic(CounterLogic):
                 return
             QtCore.QCoreApplication.processEvents() #?
             time.sleep(self.queryInterval/1000)
+        print('stop_query_loop finished in logic')
 
-    def init_data_logging(self):
+    def init_data_logging(self): #todo: delete?
         """ Zero all log buffers. """
         print('To implement')
     #    self.data['current'] = np.zeros(self.bufferLength)
@@ -234,6 +253,8 @@ class M2LaserLogic(CounterLogic):
                 # check for aborts of the thread in break if necessary
 
                 if self.stopRequested: #modified -ed
+                    self.current_state = 'stopping scan'
+                    ##self.sigUpdate.emit() #show state change 'stopping scan'
                     # close off the actual counter
                     cnt_err = self._counting_device.close_counter()
                     clk_err = self._counting_device.close_clock()
@@ -241,55 +262,71 @@ class M2LaserLogic(CounterLogic):
                         self.log.error('Could not even close the hardware, giving up.')
                     # switch the state variable off again
                     self.stopRequested = False #modified -ed
-                    self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan! TODO
-                    self.sigCounterUpdated.emit()
-
-
+                    self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan!
+                                                #does not matter, since the query loop side of things does not
+                                                #even use module_state.lock/unlock
+       #             self.sigCounterUpdated.emit() #plot last data bits?
                     return
 
-                #TODO: read the current wavelength value here as well, average with below val
+                #read the current wavelength value here as well, average with below val?
 
-                # read the current counter value
+
+                # read the current counter value.
+                #national_instruments_x_series.py is set up to return an array with a length dependent on
+                #the counter clock frequency. To integrate over counts, just sum this array along the correct dimension
+                #TODO, check this with a real photodiode by printing and seeing if it does give an array
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
 
-                #or this way, I can check the wavelength right before and right after I get a count :/
-                #and then average them to assign the "wavelength" the counts were taken at
+                numSamples = self.rawdata.shape[0]
+                self.rawdata = np.sum(self.rawdata, axis=1)
+                self.rawdata.shape = (numSamples,1)
 
-                #ADDED: read the current wavelength value
-                #Caution: the time it takes to read the wavelength value better be much much faster than the clock speed
-                #not sure right now if that's the case. Probably there's a better way to do this.
-                self.current_wavelength = self._laser.get_terascan_wavelength()
-                if self.current_wavelength == -1: #timeout in get_terascan_wavelength()
-                    ###self.stopRequested = True
-                    self.module_state.unlock()
-                    self.queryTimer.timeout.emit()
-                    #should run self.check_laser_loop() #start wavelength non-scan query loop back
+                #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
+                wavelength, current_state = self._laser.get_terascan_wavelength()
+
+                #Don't collect counts when the laser is stitching or otherwise not scanning
+                if current_state == 'stitching':
+                    print('stitching')
+                    self.sigCountDataNext.emit()
                     return
-                print(self.current_wavelength)
 
+                #Handle finished scan
+                if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
+                    print('complete')
+                    self.sigScanComplete.emit()
+                    return
+
+                #handle data collected from scan
                 if self.rawdata[0, 0] < 0: #counts can't be negative(?)
                     self.log.error('The counting went wrong, killing the counter.')
                     self.stopRequested = True #modified -ed
                 else:
                     if self._counting_mode == CountingMode['CONTINUOUS']:
+                        self.current_state = current_state
+                        self.current_wavelength = wavelength #do it this way to avoid blocking when updateGui is called below
+                        #since updateGui needs to access self.current_wavelength but it is connected to a signal so
+                        #runs asynchronously with this function which calls itself/loops
                         self._process_data_continous()
-                    elif self._counting_mode == CountingMode['GATED']:
+                    elif self._counting_mode == CountingMode['GATED']: #not tested
                         self._process_data_gated()
-                    elif self._counting_mode == CountingMode['FINITE_GATED']:
+                    elif self._counting_mode == CountingMode['FINITE_GATED']: #not tested
                         self._process_data_finite_gated()
                     else:
                         self.log.error('No valid counting mode set! Can not process counter data.')
 
+
             # call this again from event loop
-            self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI
+            self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI, update_data function
             self.sigCountDataNext.emit() #this is connected to count_loop_body, so will call this func again
+            #these two are essentially called in parallel (update gui and count_loop_body).
+            #this is okay because they don't access the same resources. count_loop_body accesses raw_data
+            #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
 
-
-            ##Careful: below may slow scan down?
-            #Ideally this would be running in parallel???? but maybe not possible given we access and write to
-            #the wavelength data with the two different processes
-            self.sigUpdate.emit()
+            self.sigUpdate.emit() #connects to updateGui to update the wavelength
+            print('count_loop_body ended')
         return
+
+
 
 
 #Overload from counter_logic so that we can save wavelength as well as counts
@@ -341,8 +378,135 @@ class M2LaserLogic(CounterLogic):
     @QtCore.Slot()
     def start_terascan(self,scantype, scanbounds, scanrate): #added, possibly/probably unecessary - could do straight in gui.
         #but maybe we don't want the gui talking directly to hardware?
-
-        self._laser.setup_terascan(scantype, scanbounds, scanrate)
+ #       print('start_terascan called in logic')
+        self._laser.setup_terascan(scantype, tuple([1E9*x for x in scanbounds]), scanrate)
         self._laser.start_terascan(scantype)
-
+ #       print('start terascan finished in logic')
         return
+
+#From logic/spectrum.py
+    def save_spectrum_data(self, background=False, name_tag='', custom_header=None):
+        """ Saves the current spectrum data to a file.
+
+        @param bool background: Whether this is a background spectrum (dark field) or not.
+
+        @param string name_tag: postfix name tag for saved filename.
+
+        @param OrderedDict custom_header:
+            This ordered dictionary is added to the default data file header. It allows arbitrary
+            additional experimental information to be included in the saved data file header.
+        """
+        self.repetition_count += 1 #increase repetitioncount
+
+        filepath = self._save_logic.get_path_for_module(module_name='spectra')
+        if background:
+            filelabel = 'background'
+            spectrum_data = self._spectrum_background
+        else:
+            filelabel = 'scan'
+            spectrum_data = self.countdata #countdata_smoothed?
+
+            # Don't include initialization 0's
+            mask = (spectrum_data == 0).all(0)
+            start_idx = np.argmax(~mask)
+            spectrum_data = spectrum_data[:, start_idx:]
+            self.countdata = spectrum_data #save over countdata to not include initialization 0s
+
+        # Add name_tag as postfix to filename
+        if name_tag != '':
+            filelabel = filelabel + '_' + name_tag
+
+        # write experimental parameters
+        parameters = OrderedDict()
+        parameters['Spectrometer acquisition repetitions'] = self.repetition_count
+
+   #      # add all fit parameter to the saved data:
+   #      if self.fc.current_fit_result is not None:
+   #          parameters['Fit function'] = self.fc.current_fit
+   #
+   #          for name, param in self.fc.current_fit_param.items():
+    #             parameters[name] = str(param)
+
+        # add any custom header params
+        if custom_header is not None:
+            for key in custom_header:
+                parameters[key] = custom_header[key]
+
+        # prepare the data in an OrderedDict:
+        data = OrderedDict()
+
+        data['wavelength'] = spectrum_data[0, :]
+
+        # # If the differential spectra arrays are not empty, save them as raw data
+        # if len(self.diff_spec_data_mod_on) != 0 and len(self.diff_spec_data_mod_off) != 0:
+        #     data['signal_mod_on'] = self.diff_spec_data_mod_on[1, :]
+        #     data['signal_mod_off'] = self.diff_spec_data_mod_off[1, :]
+        #     data['differential'] = spectrum_data[1, :]
+        # else:
+        data['signal'] = spectrum_data[1, :]
+        #
+        # if not background and len(self._spectrum_data_corrected) != 0:
+        #     data['corrected'] = self._spectrum_data_corrected[1, :]
+
+        fig = self.draw_figure()
+
+        # Save to file
+        self._save_logic.save_data(data,
+                                   filepath=filepath,
+                                   parameters=parameters,
+                                   filelabel=filelabel,
+                                   plotfig=fig)
+        self.log.debug('Spectrum saved to:\n{0}'.format(filepath))
+
+    #from spectrum.py in logic
+    def draw_figure(self):
+        """ Draw the summary plot to save with the data.
+
+        @return fig fig: a matplotlib figure object to be saved to file.
+        """
+        wavelength = self.countdata[0, :]
+        spec_data = self.countdata[1, :]
+
+        prefix = ['', 'k', 'M', 'G', 'T']
+        prefix_index = 0
+        rescale_factor = 1
+
+        # Rescale spectrum data with SI prefix
+        while np.max(spec_data) / rescale_factor > 1000:
+            rescale_factor = rescale_factor * 1000
+            prefix_index = prefix_index + 1
+
+        intensity_prefix = prefix[prefix_index]
+
+        # Prepare the figure to save as a "data thumbnail"
+        plt.style.use(self._save_logic.mpl_qd_style)
+
+        fig, ax1 = plt.subplots()
+
+        ax1.plot(wavelength,
+                 spec_data / rescale_factor,
+                 linestyle=':',
+                 linewidth=0.5
+                 )
+
+        # If there is a fit, plot it also
+ #       if self.fc.current_fit_result is not None:
+ #           ax1.plot(self.spectrum_fit[0] * 1e9,  # convert m to nm for plot
+ #                    self.spectrum_fit[1] / rescale_factor,
+ #                    marker='None'
+ #                    )
+
+        ax1.set_xlabel('Wavelength (nm)')
+        ax1.set_ylabel('Intensity ({}count)'.format(intensity_prefix))
+
+        fig.tight_layout()
+
+        return fig
+
+    def order_data(self):
+        #put data in wavelength order
+        temp = np.transpose(self.countdata)
+        temp = temp[temp[:, 0].argsort()]
+        self.countdata = np.transpose(temp)
+
+

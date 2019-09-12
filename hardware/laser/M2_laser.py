@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 This module controls an M squared laser
-Written by Graham Joe, M. Chalupnik
-
+Originally taken from:
+https://github.com/AlexShkarin/pyLabLib/blob/master/pylablib/aux_libs/devices/M2.py (I think)
+Modifications by Graham Joe, M. Chalupnik
 """
 
 from core.module import Base, ConfigOption
@@ -20,6 +21,22 @@ import websocket
 
 class M2Laser(Base, M2LaserInterface):
 #class M2Laser(): #for debugging
+
+    #copy and paste the following to the console when debugging:
+    """
+from hardware.laser import M2_laser as m2
+laser = m2.M2Laser()
+laser._ip = '10.243.43.58'
+laser._port = 39933
+laser._timeout = 5
+laser.on_activate()
+
+laser.setup_terascan("medium", (750, 751), 10E9)
+
+laser.get_laser_state()
+laser.start_terascan("medium")
+laser.stop_terascan("medium")"""
+
     """ Implements the M squared laser.
 
         Example config for copy-paste:
@@ -55,7 +72,9 @@ class M2Laser(Base, M2LaserInterface):
         self.transmission_id = 1
         self._last_status = {}
 
+        print('connecting to laser')
         self.connect_laser()
+        print('connecting to wavemeter')
         self.connect_wavemeter()
 
     def on_deactivate(self):
@@ -148,7 +167,7 @@ class M2Laser(Base, M2LaserInterface):
         May cause socket timeout if used when laser isn't scanning
         """
 
-        self.set_timeout(5) #Probably should not be hardcoded
+        self.set_timeout(5) #if this is lower than 5 (e.g. 2) things crash
         try:
             report = self.socket.recv(bits)
         except:
@@ -190,8 +209,8 @@ class M2Laser(Base, M2LaserInterface):
             report = self.socket.recv(10000)
             op_reports, parameters_reports = self._parse_reply(report)
             for op_report, parameters_report in zip(op_reports, parameters_reports):
-                print(op_report)
-                print(parameters_report)
+ #               print(op_report)
+ #               print(parameters_report)
 
                 if not self._is_report_op(op_report):
                     pass
@@ -301,7 +320,7 @@ class M2Laser(Base, M2LaserInterface):
             pass
             #self.log.warning("can't tune wavelength: {}nm is out of range".format(wavelength * 1E9))
         if sync:
-            return self.wait_for_report('set_wav_m', timeout=timeout)
+            return self.wait_for_report('set_wave_m', timeout=timeout)
 
     def check_tuning_report(self):
         """Check wavelength fine-tuning report
@@ -339,17 +358,47 @@ class M2Laser(Base, M2LaserInterface):
 
     def get_terascan_wavelength(self):
         #use this function to get the wavelength while terascan is running
-        #flush will cause socket timeout if you try to use it when the laser isn't scanning
-        timeouted = self.flush()
+        #currently calls to this function take ~.21 sec
+        timeouted = self.flush(1000000)
 
         if timeouted == -1: #timeout or some other error in flush()
-            print('Flush error in get_terascan_wavelength')
-            return -1
+            #assume this means the scan is done, even though there are other possible reasons for this to occur
+            #(eg. bad connection)
+            print('Timeout in get_terascan_wavelength')
+            return -1, 'complete'
 
         out = self.get_laser_state()
-        return out['wavelength'][0]
 
-    #TODO if this works do the same for status, ie. stitching vs scanning
+        if out.get('activity'):
+            status = out['activity']
+        else:
+            status = 'stitching'
+            print(out)
+
+        return out['wavelength'][0], status
+
+    def get_terascan_wavelength_web(self):
+        #Currently does not work very well
+        #uses websocket instead of tcp socket to get wavelength
+        #calls take ~0.18 sec, not appreciably faster
+    #    while True:
+    #        try:
+    #            msg_data = self._read_websocket_status_leftpanel()
+    #            break
+    #        except:
+    #            time.sleep(0.05)
+
+        try:
+            msg_data = self._read_websocket_status_leftpanel()
+        except:
+            print('Scan completed')
+            return -1, 'complete'
+
+        if msg_data['dodgy_reading']:
+            status = 'stitching'
+        else:
+            status = 'scanning'
+        return msg_data['wlm_wavelength'], status
 
 
     def stop_tuning(self):
@@ -358,7 +407,7 @@ class M2Laser(Base, M2LaserInterface):
         _, reply = self.send("stop_move_wave_t", {})
         print(reply)
         if reply[-1]["status"][0] == 1:
-            pass
+            print('-1')
             #self.log.warning("can't stop tuning: no wavemeter link")
 
     def tune_wavelength_table(self, wavelength, sync=True):
@@ -467,6 +516,11 @@ class M2Laser(Base, M2LaserInterface):
         parameters = {"scan": scan_type, "start": [scan_range[0]], "stop": [scan_range[1]],
                   "rate": [rate / fact], "units": units}
         _, reply = self.send('scan_stitch_initialise', parameters)
+
+        if not reply[-1].get('status'):
+            print(reply)
+            return 2 #error!
+
         if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't setup TeraScan: start ({:.3f} THz) is out of range".format(scan_range[0] / 1E12))
@@ -566,19 +620,27 @@ class M2Laser(Base, M2LaserInterface):
         :param sync_done bool: wait until the scan stop is complete.
         """
         self._check_terascan_type(scan_type)
-        _, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
-        print(reply)
-  #      if reply[-1]["status"][0] == 1:
-  #          pass
-  #          #self.log.warning("can't stop TeraScan: operation failed")
-  #      elif reply[-1]["status"][0] == 2:
-  #          pass
-  #          #self.log.warning("can't stop TeraScan: TeraScan not available")
+
+        #Using TCP connection (below) works, but is very slow
+        #_, reply = self.send("scan_stitch_op", {"scan": scan_type, "operation": "stop"})
+        #print(reply)
+
+        #FASTER WAY: Seems is already here via stop_scan_web - look into
+        self._send_websocket_request(
+            '{"stop_scan_stitching":1,"message_type":"page_update"}'
+        )
+        self._send_websocket_request(
+            '{"message_type":"task_request","task":["medium_scan_stop"]}')
         if sync:
-            ready = 0
-            while ready != -1:
-                ready = self.flush()
-            self.on_activate()
+           # ready = 0
+           # while ready != -1:
+           #     ready = self.flush() #waste of 5 seconds
+            while True:
+                try:
+                    self.on_activate() #todo fix so on_activate isn't necessary
+                    return
+                except:
+                    pass
             ##self.wait_for_report("scan_stitch_op")
 
     _web_scan_status_str = ['off', 'cont', 'single', 'flyback', 'on', 'fail']
@@ -783,6 +845,7 @@ class M2Laser(Base, M2LaserInterface):
             self._check_fast_scan_type(scan_type)
             scan_type = scan_type.replace("continuous", "cont")
         scan_task = scan_type + "_stop"
+        print(scan_task) #check
         self._send_websocket_request('{{"message_type":"task_request","task":["{}"]}}'.format(scan_task))
 
     _default_terascan_rates = {"line": 10E6, "fine": 100E6, "medium": 5E9}
@@ -838,7 +901,7 @@ class M2Laser(Base, M2LaserInterface):
             attempts += 1
             if (attempts > 10 and ctd.passed()):
                 #raise M2Error("coudn't stop all operations: timed out")
-                print('THIS HAPPENED HERE')
+                print('M2 Error: could not stop all operations')
         return not operating
 
     def _build_message(self, op, params, transmission_id=None):
@@ -862,7 +925,7 @@ class M2Laser(Base, M2LaserInterface):
         :param message: json string
         :return: message dictionary
         """
-        print(message)
+  #      print(message)
 #        print(len(message))  # seems messages are greater than the buffer length... not sure why
 
         if len(message) >= self.buffersize: #As is, this throws away data from messages on the edges of the buffer
@@ -964,6 +1027,26 @@ class M2Laser(Base, M2LaserInterface):
         finally:
             ws.recv()
             ws.close()
+
+    def _read_websocket_status_leftpanel(self, present_key=None, nmax=20):
+        """ Reads the websocket status
+
+        :param present_key: not sure, I think its the status that we are waiting or
+        :param nmax: number of iterations to wait for
+        :return: websocket status
+        """
+        print('inside read websocket status')
+        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address[0]), timeout=self.timeout)
+        try:
+            self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax) #first call gets first_page
+            print('read websocket status ended')
+            return self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax) #second call gets left_panel
+        finally:
+            ws.recv()
+            ws.close()
+
+        print('read websocket stautus ended')
+
 
     def _check_terascan_type(self, scan_type):
         """Checks that the terascan type is valid.
