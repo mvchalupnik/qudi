@@ -356,7 +356,7 @@ laser.stop_terascan("medium")"""
         """
         return self.get_full_tuning_status()["current_wavelength"][0]
 
-    def get_terascan_wavelength(self):
+    def get_terascan_wavelength_tcp(self):
         #use this function to get the wavelength while terascan is running
         #currently calls to this function take ~.21 sec
         timeouted = self.flush(1000000)
@@ -376,16 +376,21 @@ laser.stop_terascan("medium")"""
 
         return out['wavelength'][0], status
 
-    def get_terascan_wavelength_web(self):
+    def get_terascan_wavelength(self):
         #Currently does not work very well
         #uses websocket instead of tcp socket to get wavelength
         #calls take ~0.18 sec, not appreciably faster
-        while True:
-            try:
-                msg_data = self._read_websocket_status_leftpanel()
-                break
-            except:
-                time.sleep(0.05)
+    #    while True:
+    #        try:
+    #            msg_data = self._read_websocket_status_leftpanel()
+    #            break
+    #        except:
+    #            time.sleep(0.05)
+
+        try:
+            msg_data = self._read_websocket_status_leftpanel()
+        except:
+            return -1, 'complete'
 
         if msg_data['dodgy_reading']:
             status = 'stitching'
@@ -1023,14 +1028,17 @@ laser.stop_terascan("medium")"""
         :param nmax: number of iterations to wait for
         :return: websocket status
         """
+        print('inside read websocket status')
         ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address[0]), timeout=self.timeout)
         try:
             self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax) #first call gets first_page
+            print('read websocket status ended')
             return self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax) #second call gets left_panel
         finally:
             ws.recv()
             ws.close()
 
+        print('read websocket stautus ended')
 
 
     def _check_terascan_type(self, scan_type):
