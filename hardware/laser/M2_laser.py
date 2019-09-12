@@ -356,7 +356,7 @@ laser.stop_terascan("medium")"""
         """
         return self.get_full_tuning_status()["current_wavelength"][0]
 
-    def get_terascan_wavelength_tcp(self):
+    def get_terascan_wavelength(self):
         #use this function to get the wavelength while terascan is running
         #currently calls to this function take ~.21 sec
         timeouted = self.flush(1000000)
@@ -376,7 +376,7 @@ laser.stop_terascan("medium")"""
 
         return out['wavelength'][0], status
 
-    def get_terascan_wavelength(self):
+    def get_terascan_wavelength_web(self):
         #Currently does not work very well
         #uses websocket instead of tcp socket to get wavelength
         #calls take ~0.18 sec, not appreciably faster
@@ -390,6 +390,7 @@ laser.stop_terascan("medium")"""
         try:
             msg_data = self._read_websocket_status_leftpanel()
         except:
+            print('Scan completed')
             return -1, 'complete'
 
         if msg_data['dodgy_reading']:

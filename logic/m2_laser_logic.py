@@ -194,8 +194,9 @@ class M2LaserLogic(CounterLogic):
             pass
 
         except:
-            qi = 3000
-            self.log.exception("Exception in laser status loop, throttling refresh rate.")
+            #qi = 3000
+            #self.log.exception("Exception in laser status loop, throttling refresh rate.")
+            return #?Not sure, JUST ADDED
 
         self.queryTimer.start(qi)
         self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
