@@ -210,7 +210,7 @@ class M2LaserLogic(CounterLogic):
     def start_query_loop(self):
         """ Start the readout loop. """
  #       print('start_query_loop called in logic')
-        self.module_state.run()
+      #  self.module_state.run()
         self.queryTimer.start(self.queryInterval)
  #       print('start_query_loop finished in logic')
 
@@ -244,9 +244,6 @@ class M2LaserLogic(CounterLogic):
         It runs repeatedly in the logic module event loop by being connected
         to sigCountContinuousNext and emitting sigCountContinuousNext through a queued connection.
         """
-
-        #odmr_logic flips the two statements below! in _scan_odmr_line
-        #todo figure out which is best
         print('count_loop_body runs')
         if self.module_state() == 'locked': #
             with self.threadlock:
