@@ -194,9 +194,12 @@ class M2LaserLogic(CounterLogic):
             pass
 
         except:
+            print('in check_laser_loop exception')
             #qi = 3000
             #self.log.exception("Exception in laser status loop, throttling refresh rate.")
-            return #?Not sure, JUST ADDED
+            return #this improved stability, and somehow didn't stop check_laser_loop
+                #from working... not sure what to make of that... does SingleShot not work?
+                #maybe while testing I haven't actually accessed this?
 
         self.queryTimer.start(qi)
         self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file

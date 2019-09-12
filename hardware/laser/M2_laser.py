@@ -373,6 +373,7 @@ laser.stop_terascan("medium")"""
             status = out['activity']
         else:
             status = 'stitching'
+            print(out)
 
         return out['wavelength'][0], status
 
@@ -515,6 +516,11 @@ laser.stop_terascan("medium")"""
         parameters = {"scan": scan_type, "start": [scan_range[0]], "stop": [scan_range[1]],
                   "rate": [rate / fact], "units": units}
         _, reply = self.send('scan_stitch_initialise', parameters)
+
+        if not reply[-1].get('status'):
+            print(reply)
+            return 2 #error!
+
         if reply[-1]["status"][0] == 1:
             pass
             #self.log.warning("can't setup TeraScan: start ({:.3f} THz) is out of range".format(scan_range[0] / 1E12))
