@@ -349,9 +349,6 @@ class M2ScannerGUI(GUIBase):
                 error_dialog.exec()
                 return self._laser_logic.module_state()
 
-            #            self._laser_logic.setup_terascan(scantype,(startWvln, stopWvln), scanrate)
-            #            self._laser_logic.start_terascan(scantype)
-
             ####JUST ADDED
             self._laser_logic.stop_query_loop() #careful with this todo look at
 

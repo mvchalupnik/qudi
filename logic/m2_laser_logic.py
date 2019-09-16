@@ -56,6 +56,7 @@ class M2LaserLogic(CounterLogic):
     _modclass = 'm2laser'
     _modtype = 'logic'
 
+
     laser = Connector(interface='M2LaserInterface')
     # waiting time between queries im milliseconds
     queryInterval = ConfigOption('query_interval', 100) #needed for wavemeter
@@ -84,8 +85,7 @@ class M2LaserLogic(CounterLogic):
     savelogic = Connector(interface='SaveLogic')
 
     # status vars
-    _count_length = StatusVar('count_length', 300)
-    _smooth_window_length = StatusVar('smooth_window_length', 10)
+    _smooth_window_length = StatusVar('smooth_window_length', 10) #these may not do anything
     _counting_samples = StatusVar('counting_samples', 1)
     _count_frequency = StatusVar('count_frequency', 50)
     _saving = StatusVar('saving', False)
@@ -97,6 +97,10 @@ class M2LaserLogic(CounterLogic):
         print('on_activate is called in m2_laser_logic')
         self._counting_device = self.counter1()
         self._save_logic = self.savelogic()
+
+        # Overwrite count_length from counter_logic so that we can have data longer than 300 points
+        self._count_length = 1000000
+
 
         # Recall saved app-parameters
         if 'counting_mode' in self._statusVariables:
