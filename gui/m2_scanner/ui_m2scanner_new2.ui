@@ -34,6 +34,7 @@
      <string>Fi&amp;le</string>
     </property>
     <addaction name="save_scan_Action"/>
+    <addaction name="actionSave_as"/>
     <addaction name="actionClose"/>
    </widget>
    <widget class="QMenu" name="menuView">
@@ -230,7 +231,7 @@
            <property name="sizeHint" stdset="0">
             <size>
              <width>10</width>
-             <height>10</height>
+             <height>20</height>
             </size>
            </property>
           </spacer>
@@ -257,7 +258,7 @@
            <property name="sizeHint" stdset="0">
             <size>
              <width>10</width>
-             <height>10</height>
+             <height>20</height>
             </size>
            </property>
           </spacer>
@@ -340,7 +341,7 @@
            <property name="sizeHint" stdset="0">
             <size>
              <width>10</width>
-             <height>10</height>
+             <height>20</height>
             </size>
            </property>
           </spacer>
@@ -380,7 +381,7 @@
            <property name="sizeHint" stdset="0">
             <size>
              <width>10</width>
-             <height>10</height>
+             <height>20</height>
             </size>
            </property>
           </spacer>
@@ -463,7 +464,7 @@
            <property name="sizeHint" stdset="0">
             <size>
              <width>10</width>
-             <height>10</height>
+             <height>20</height>
             </size>
            </property>
           </spacer>
@@ -503,7 +504,7 @@
            <property name="sizeHint" stdset="0">
             <size>
              <width>10</width>
-             <height>10</height>
+             <height>20</height>
             </size>
            </property>
           </spacer>
@@ -635,7 +636,7 @@
      <normaloff>../../artwork/icons/oxygen/22x22/document-save.png</normaloff>../../artwork/icons/oxygen/22x22/document-save.png</iconset>
    </property>
    <property name="text">
-    <string>&amp;Save spectrum</string>
+    <string>&amp;Save</string>
    </property>
    <property name="toolTip">
     <string>Save spectrum (Strg+S)</string>
@@ -699,6 +700,11 @@
   <action name="action_FitSettings">
    <property name="text">
     <string>&amp;Fit settings</string>
+   </property>
+  </action>
+  <action name="actionSave_as">
+   <property name="text">
+    <string>&amp;Save as...</string>
    </property>
   </action>
  </widget>
