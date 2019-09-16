@@ -146,6 +146,9 @@ class M2LaserLogic(CounterLogic):
         #everytime queryTimer timeout emits a signal, run check_laser_loop
         self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.QueuedConnection)
 
+        #set up default save_folder
+        self.filepath = self._save_logic.get_path_for_module(module_name='spectra')
+
         # get laser capabilities at start (currently not doing anything with laserstate
  ###       self.laser_state = self._laser.get_laser_state()
         self.current_wavelength = self._laser.get_wavelength()
@@ -183,7 +186,7 @@ class M2LaserLogic(CounterLogic):
     #This is adapted from original laser_logic
     @QtCore.Slot()
     def check_laser_loop(self):
-        print('check_laser_loop called in logic')
+  #      print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
         if self.stopRequest: #no -ed
             if self.module_state.can('stop'):
@@ -198,7 +201,7 @@ class M2LaserLogic(CounterLogic):
             pass
 
         except:
-            print('in check_laser_loop exception')
+  #          print('in check_laser_loop exception')
             #qi = 3000
             #self.log.exception("Exception in laser status loop, throttling refresh rate.")
             return #this improved stability, and somehow didn't stop check_laser_loop
@@ -207,7 +210,7 @@ class M2LaserLogic(CounterLogic):
 
         self.queryTimer.start(qi)
         self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
-        print('check_laser_loop finished in logic')
+  #      print('check_laser_loop finished in logic')
 
 
     @QtCore.Slot()
@@ -220,7 +223,7 @@ class M2LaserLogic(CounterLogic):
 
     @QtCore.Slot()
     def stop_query_loop(self):
-        print('stop_query_loop called in logic')
+    #    print('stop_query_loop called in logic')
         """ Stop the readout loop. """
         self.stopRequest = True #no -ed
         for i in range(10):
@@ -228,7 +231,7 @@ class M2LaserLogic(CounterLogic):
                 return
             QtCore.QCoreApplication.processEvents() #?
             time.sleep(self.queryInterval/1000)
-        print('stop_query_loop finished in logic')
+    #    print('stop_query_loop finished in logic')
 
     def init_data_logging(self): #todo: delete?
         """ Zero all log buffers. """
@@ -248,7 +251,7 @@ class M2LaserLogic(CounterLogic):
         It runs repeatedly in the logic module event loop by being connected
         to sigCountContinuousNext and emitting sigCountContinuousNext through a queued connection.
         """
-        print('count_loop_body runs')
+     #   print('count_loop_body runs')
         if self.module_state() == 'locked': #
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
@@ -287,13 +290,13 @@ class M2LaserLogic(CounterLogic):
 
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
-                    print('stitching')
+            #        print('stitching')
                     self.sigCountDataNext.emit()
                     return
 
                 #Handle finished scan
                 if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
-                    print('complete')
+             #       print('complete')
                     self.sigScanComplete.emit()
                     return
 
@@ -324,7 +327,7 @@ class M2LaserLogic(CounterLogic):
             #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
 
             self.sigUpdate.emit() #connects to updateGui to update the wavelength
-            print('count_loop_body ended')
+       #     print('count_loop_body ended')
         return
 
 
@@ -399,7 +402,7 @@ class M2LaserLogic(CounterLogic):
         """
         self.repetition_count += 1 #increase repetitioncount
 
-        filepath = self._save_logic.get_path_for_module(module_name='spectra')
+        #filepath = self._save_logic.get_path_for_module(module_name='spectra')
         if background:
             filelabel = 'background'
             spectrum_data = self._spectrum_background
@@ -453,11 +456,11 @@ class M2LaserLogic(CounterLogic):
 
         # Save to file
         self._save_logic.save_data(data,
-                                   filepath=filepath,
+                                   filepath=self.filepath,
                                    parameters=parameters,
                                    filelabel=filelabel,
                                    plotfig=fig)
-        self.log.debug('Spectrum saved to:\n{0}'.format(filepath))
+        self.log.debug('Scan Counts saved to:\n{0}'.format(self.filepath))
 
     #from spectrum.py in logic
     def draw_figure(self):

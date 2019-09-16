@@ -80,7 +80,7 @@ class M2ScannerGUI(GUIBase):
 
         self._mw.run_scan_Action.triggered.connect(self.start_clicked)  # start_clicked then triggers sigStartCounter
         self._mw.save_scan_Action.triggered.connect(self.save_spectrum_data)  # start_clicked then triggers sigStartCounter
-
+        self._mw.actionSave_as.triggered.connect(self.change_filepath)
         #       self._mw.save_scan_Action.triggered.connect(self.save_clicked) #there is no save_clicked function
         # self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
         #      self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
@@ -409,6 +409,12 @@ class M2ScannerGUI(GUIBase):
 
             self._laser_logic.module_state.unlock()
             self.sigStartCounter.emit() #clears out data, etc.
+
+    def change_filepath(self):
+        save_dialog = QtWidgets.QFileDialog()
+        self._laser_logic.filepath = save_dialog.getExistingDirectory()
+        print('Saving in ' + self._laser_logic.filepath)
+        self.save_spectrum_data()
 
 
 #https://doc.qt.io/qt-5/signalsandslots.html
