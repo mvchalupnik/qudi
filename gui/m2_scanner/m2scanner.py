@@ -395,11 +395,12 @@ class M2ScannerGUI(GUIBase):
 
         if numScans == self._laser_logic.repetition_count or self._laser_logic.repetition_count == 0:
 
-            self._laser_logic.repetition_count = 0
+            self._laser_logic.repetition_count = 0 #reset repetition count
 
             self._mw.replot_pushButton.setEnabled(True)
 
             self._laser_logic.module_state.unlock()
+            ######self.sigStopCounter.emit() #stop counter???? why was this working before without this?
             self._laser_logic.queryTimer.timeout.emit() #restart wavelength updates
         else:
             self._mw.scanNumber_label.setText("Scan {0:d} of {1:d}".format(self._laser_logic.repetition_count + 1, numScans))
