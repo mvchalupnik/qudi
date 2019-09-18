@@ -155,7 +155,7 @@ class M2LaserLogic(CounterLogic):
 
 
      #   self.init_data_logging() #currently is doing nothing, TODO delete
-        self.start_query_loop() #why put this here also?
+   #     self.start_query_loop() #why put this here also?
 
 
     def on_deactivate(self):
@@ -286,6 +286,8 @@ class M2LaserLogic(CounterLogic):
                 self.rawdata = np.sum(self.rawdata, axis=1)
                 self.rawdata.shape = (numSamples,1)
 
+                #potentially error I am seeing: stop is pressed while process flow is about here.
+                #key error as laser scan stops but this function still searches for wavelength todo fix
 
                 #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
                 wavelength, current_state = self._laser.get_terascan_wavelength()
@@ -298,7 +300,9 @@ class M2LaserLogic(CounterLogic):
 
                 #Handle finished scan
                 if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
-             #       print('complete')
+                    print('complete')
+                    cnt_err = self._counting_device.close_counter()
+                    clk_err = self._counting_device.close_clock()
                     self.sigScanComplete.emit()
                     return
 
