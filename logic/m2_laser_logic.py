@@ -118,7 +118,6 @@ class M2LaserLogic(CounterLogic):
         # initialize data arrays
         self.countdata = np.zeros([len(self.get_channels())+1, self._count_length])#TODO are some of these unused/can be deleted?
         self.countdata_smoothed = np.zeros([len(self.get_channels())+1, self._count_length])
-        print(self.countdata.shape)
         self.rawdata = np.zeros([len(self.get_channels())+1, self._counting_samples])
         self._already_counted_samples = 0  # For gated counting
         self._data_to_save = []
@@ -282,13 +281,11 @@ class M2LaserLogic(CounterLogic):
                 #TODO, check this with a real photodiode by printing and seeing if it does give an array
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
 
-                print('here is rawdtaa shape')
-                print(self.rawdata.shape)
+
                 numSamples = self.rawdata.shape[0]
                 self.rawdata = np.sum(self.rawdata, axis=1)
                 self.rawdata.shape = (numSamples,1)
-                print('here is rawdata shape')
-                print(self.rawdata.shape)
+
 
                 #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
                 wavelength, current_state = self._laser.get_terascan_wavelength()
@@ -346,13 +343,6 @@ class M2LaserLogic(CounterLogic):
         """
 
         self.countdata[0, 0] = np.average(self.current_wavelength)
-        print('here is channel length  used to create countdata')
-        print(len(self.get_channels()))
-        print(self.current_wavelength)
-        print('is wavelength')
-        print(self.rawdata[0][0])
-        print('is rawdata')
-        print(self.countdata.shape)
         self.countdata[1, 0] = np.average(self.rawdata[0][0])
 
 
