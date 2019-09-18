@@ -116,9 +116,10 @@ class M2LaserLogic(CounterLogic):
         self.integrated_counts = 0
 
         # initialize data arrays
-        self.countdata = np.zeros([len(self.get_channels()), self._count_length])#TODO are some of these unused/can be deleted?
-        self.countdata_smoothed = np.zeros([len(self.get_channels()), self._count_length])
-        self.rawdata = np.zeros([len(self.get_channels()), self._counting_samples])
+        self.countdata = np.zeros([len(self.get_channels())+1, self._count_length])#TODO are some of these unused/can be deleted?
+        self.countdata_smoothed = np.zeros([len(self.get_channels())+1, self._count_length])
+        print(self.countdata.shape)
+        self.rawdata = np.zeros([len(self.get_channels())+1, self._counting_samples])
         self._already_counted_samples = 0  # For gated counting
         self._data_to_save = []
 
@@ -281,9 +282,13 @@ class M2LaserLogic(CounterLogic):
                 #TODO, check this with a real photodiode by printing and seeing if it does give an array
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
 
+                print('here is rawdtaa shape')
+                print(self.rawdata.shape)
                 numSamples = self.rawdata.shape[0]
                 self.rawdata = np.sum(self.rawdata, axis=1)
                 self.rawdata.shape = (numSamples,1)
+                print('here is rawdata shape')
+                print(self.rawdata.shape)
 
                 #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
                 wavelength, current_state = self._laser.get_terascan_wavelength()
@@ -341,7 +346,14 @@ class M2LaserLogic(CounterLogic):
         """
 
         self.countdata[0, 0] = np.average(self.current_wavelength)
-        self.countdata[1, 0] = np.average(self.rawdata[0])
+        print('here is channel length  used to create countdata')
+        print(len(self.get_channels()))
+        print(self.current_wavelength)
+        print('is wavelength')
+        print(self.rawdata[0][0])
+        print('is rawdata')
+        print(self.countdata.shape)
+        self.countdata[1, 0] = np.average(self.rawdata[0][0])
 
 
         # move the array to the left to make space for the new data
@@ -350,7 +362,7 @@ class M2LaserLogic(CounterLogic):
         self.countdata_smoothed = np.roll(self.countdata_smoothed, -1, axis=1) #?? what is this?
         # calculate the median and save it
         window = -int(self._smooth_window_length / 2) - 1 #why/what?
-        for i, ch in enumerate(self.get_channels()):
+        for i in range(len(self.get_channels())+1):
             self.countdata_smoothed[i, window:] = np.median(self.countdata[i,
                                                             -self._smooth_window_length:])
 
@@ -361,17 +373,17 @@ class M2LaserLogic(CounterLogic):
                 chans = self.get_channels()
                 self._sampling_data = np.empty([len(chans) + 1, self._counting_samples])
                 self._sampling_data[0, :] = time.time() - self._saving_start_time
-                for i, ch in enumerate(chans):
+                for i in range(len(chans)):
                     self._sampling_data[i+1, 0] = self.rawdata[i]
 
                 self._data_to_save.extend(list(self._sampling_data))
             # if we don't want to use oversampling
             else:
                 # append tuple to data stream (timestamp, average counts)
-                chans = self.get_channels() #this should always be 1 for us!!! todo error if not
+                chans = self.get_channels() #this should always be 2 for us!!! todo error if not
                 newdata = np.empty((len(chans) + 1, ))
                 newdata[0] = time.time() - self._saving_start_time
-                for i, ch in enumerate(chans):
+                for i in range(len(chans) +1):
                     newdata[i+1] = self.countdata[i, -1]
                 self._data_to_save.append(newdata) #stuff newdata into _data_to_save class array
         return
@@ -514,3 +526,67 @@ class M2LaserLogic(CounterLogic):
         self.countdata = np.transpose(temp)
 
 
+    # FIXME: Not implemented for self._counting_mode == 'gated'
+    def startCount(self):
+        """ This is called externally, and is basically a wrapper that
+            redirects to the chosen counting mode start function.
+
+            @return error: 0 is OK, -1 is error
+        """
+        # Sanity checks
+        constraints = self.get_hardware_constraints()
+        # TODO: BUG FIXED HERE: introduce corresponding changes to GitHub files
+        if self._counting_mode.value not in [constraints.counting_mode[j].value for j in range(len(constraints.counting_mode))]:
+            self.log.error('Unknown counting mode "{0}". Cannot start the counter.'
+                           ''.format(self._counting_mode))
+            self.sigCountStatusChanged.emit(False)
+            return -1
+        # ORIGINAL VERSION
+        # constraints = self.get_hardware_constraints()
+        # if self._counting_mode not in constraints.counting_mode:
+        #     self.log.error('Unknown counting mode "{0}". Cannot start the counter.'
+        #                    ''.format(self._counting_mode))
+        #     self.sigCountStatusChanged.emit(False)
+        #     return -1
+
+        with self.threadlock:
+            # Lock module
+            if self.module_state() != 'locked':
+                self.module_state.lock()
+            else:
+                self.log.warning('Counter already running. Method call ignored.')
+                return 0
+
+            # Set up clock
+            clock_status = self._counting_device.set_up_clock(clock_frequency=self._count_frequency)
+            if clock_status < 0:
+                self.module_state.unlock()
+                self.sigCountStatusChanged.emit(False)
+                return -1
+
+            # Set up counter
+            if self._counting_mode == CountingMode['FINITE_GATED']:
+                counter_status = self._counting_device.set_up_counter(counter_buffer=self._count_length)
+            # elif self._counting_mode == CountingMode['GATED']:
+            #
+            else:
+                counter_status = self._counting_device.set_up_counter()
+            if counter_status < 0:
+                self._counting_device.close_clock()
+                self.module_state.unlock()
+                self.sigCountStatusChanged.emit(False)
+                return -1
+
+            # initialising the data arrays
+            self.rawdata = np.zeros([len(self.get_channels())+1, self._counting_samples])
+            self.countdata = np.zeros([len(self.get_channels())+1, self._count_length])
+            self.countdata_smoothed = np.zeros([len(self.get_channels())+1, self._count_length])
+            self._sampling_data = np.empty([len(self.get_channels())+1, self._counting_samples])
+
+            # the sample index for gated counting
+            self._already_counted_samples = 0
+
+            # Start data reader loop
+            self.sigCountStatusChanged.emit(True)
+            self.sigCountDataNext.emit()
+            return
