@@ -64,7 +64,7 @@ class M2LaserLogic(CounterLogic):
     sigUpdate = QtCore.Signal()
     sigStartScan = QtCore.Signal() #Just added
 
-  ######  wavelength = 0 #JUST ADDED
+
 
     #############    Adapted from CounterLogic
     sigCounterUpdated = QtCore.Signal()
@@ -134,17 +134,17 @@ class M2LaserLogic(CounterLogic):
         """ Prepare logic module for work.
         """
         self._laser = self.laser()
-        self.stopRequest = False #duplicate, no -ed
-        self.bufferLength = 100 #?
-        self.data = {}
+#        self.stopRequest = False #duplicate, no -ed
+#        self.bufferLength = 100 #?
+#        self.data = {}
 
-        # delay timer for querying laser
-        self.queryTimer = QtCore.QTimer()
-        self.queryTimer.setInterval(self.queryInterval)
-        self.queryTimer.setSingleShot(True)
-
-        #everytime queryTimer timeout emits a signal, run check_laser_loop
-        self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.QueuedConnection)
+#        # delay timer for querying laser
+#        self.queryTimer = QtCore.QTimer()
+#        self.queryTimer.setInterval(self.queryInterval)
+#        self.queryTimer.setSingleShot(True)
+#
+#        #everytime queryTimer timeout emits a signal, run check_laser_loop
+#        self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.QueuedConnection)
 
         #set up default save_folder
         self.filepath = self._save_logic.get_path_for_module(module_name='spectra')
@@ -171,71 +171,71 @@ class M2LaserLogic(CounterLogic):
 
         self.sigCountDataNext.disconnect()
 
-        #from laser_logic
-        """ Deactivate modeule.
-        """
-        print('TRYING TO DEACTIVATE in logic')
-        self.stop_query_loop()
-        for i in range(5):
-            time.sleep(self.queryInterval / 1000)
-            QtCore.QCoreApplication.processEvents()
+ #       #from laser_logic
+ #       """ Deactivate modeule.
+ #       """
+ #       print('TRYING TO DEACTIVATE in logic')
+ #       self.stop_query_loop()
+ #       for i in range(5):
+ #           time.sleep(self.queryInterval / 1000)
+ #           QtCore.QCoreApplication.processEvents()
 
 
 
-    #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
-    #This is adapted from original laser_logic
-    @QtCore.Slot()
-    def check_laser_loop(self):
+  #  #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
+  #  #This is adapted from original laser_logic
+  #  @QtCore.Slot()
+  #  def check_laser_loop(self):
   #      print('check_laser_loop called in logic')
-        """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
-        if self.stopRequest: #no -ed
-            if self.module_state.can('stop'):
-                self.module_state.stop()
-            self.stopRequest = False #no -ed
-            return
-        qi = self.queryInterval
-        try:
-            #print('laserloop', QtCore.QThread.currentThreadId())
-            self.current_wavelength = self._laser.get_wavelength()
-            self.current_state = 'idle'
-            pass
-
-        except:
+  #      """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
+  #      if self.stopRequest: #no -ed
+  #          if self.module_state.can('stop'):
+  #              self.module_state.stop()
+  #          self.stopRequest = False #no -ed
+  #          return
+  #      qi = self.queryInterval
+  #      try:
+  #          #print('laserloop', QtCore.QThread.currentThreadId())
+  #          self.current_wavelength = self._laser.get_wavelength()
+ #           self.current_state = 'idle'
+ #           pass
+#
+#        except:
   #          print('in check_laser_loop exception')
             #qi = 3000
             #self.log.exception("Exception in laser status loop, throttling refresh rate.")
-            return #this improved stability, and somehow didn't stop check_laser_loop
+ #           return #this improved stability, and somehow didn't stop check_laser_loop
                 #from working... not sure what to make of that... does SingleShot not work?
                 #maybe while testing I haven't actually accessed this?
 
-        self.queryTimer.start(qi)
-        self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
+ #       self.queryTimer.start(qi)
+ #       self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
   #      print('check_laser_loop finished in logic')
 
 
-    @QtCore.Slot()
-    def start_query_loop(self):
-        """ Start the readout loop. """
+  #  @QtCore.Slot()
+  #  def start_query_loop(self):
+  #      """ Start the readout loop. """
  #       print('start_query_loop called in logic')
       #  self.module_state.run()
-        self.queryTimer.start(self.queryInterval)
+  #      self.queryTimer.start(self.queryInterval)
  #       print('start_query_loop finished in logic')
 
-    @QtCore.Slot()
-    def stop_query_loop(self):
-    #    print('stop_query_loop called in logic')
-        """ Stop the readout loop. """
-        self.stopRequest = True #no -ed
-        for i in range(10):
-            if not self.stopRequest: #no -ed
-                return
-            QtCore.QCoreApplication.processEvents() #?
-            time.sleep(self.queryInterval/1000)
-    #    print('stop_query_loop finished in logic')
+ #   @QtCore.Slot()
+ #   def stop_query_loop(self):
+ #   #    print('stop_query_loop called in logic')
+ #       """ Stop the readout loop. """
+ #       self.stopRequest = True #no -ed
+ #       for i in range(10):
+ #           if not self.stopRequest: #no -ed
+ #               return
+ #           QtCore.QCoreApplication.processEvents() #?
+ #           time.sleep(self.queryInterval/1000)
+ #   #    print('stop_query_loop finished in logic')
 
-    def init_data_logging(self): #todo: delete?
-        """ Zero all log buffers. """
-        print('To implement')
+  #  def init_data_logging(self): #todo: delete?
+  #      """ Zero all log buffers. """
+  #      print('To implement')
     #    self.data['current'] = np.zeros(self.bufferLength)
     #    self.data['power'] = np.zeros(self.bufferLength)
     #    self.data['time'] = np.ones(self.bufferLength) * time.time()

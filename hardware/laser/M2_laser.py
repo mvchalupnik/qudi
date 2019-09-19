@@ -369,6 +369,12 @@ laser.stop_terascan("medium")"""
 
         out = self.get_laser_state()
 
+        if out.get('report'): #I think this means we happened to land on the report end status update
+            #(unlikely since we are constantly grabbing one update out of many)
+            print(out)
+            return -1, 'complete'
+
+
         if out.get('activity'):
             status = out['activity']
         else:
