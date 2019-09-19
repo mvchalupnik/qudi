@@ -181,6 +181,11 @@ class M2LaserLogic(CounterLogic):
                     clk_err = self._counting_device.close_clock()
                     if cnt_err < 0 or clk_err < 0:
                         self.log.error('Could not even close the hardware, giving up.')
+
+                    #   Stop the terascan
+                    self._laser.stop_terascan(self.scanParams["scantype"], True)
+
+
                     # switch the state variable off again
                     self.stopRequested = False #modified -ed
                     self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan!
@@ -304,11 +309,11 @@ class M2LaserLogic(CounterLogic):
 
 
 
-    @QtCore.Slot()
-    def start_terascan(self,scantype, scanbounds, scanrate):
-        self._laser.setup_terascan(scantype, tuple([1E9*x for x in scanbounds]), scanrate)
-        self._laser.start_terascan(scantype)
-        return
+#    @QtCore.Slot()
+#    def start_terascan(self,scantype, scanbounds, scanrate):
+#        self._laser.setup_terascan(scantype, tuple([1E9*x for x in scanbounds]), scanrate)
+#        self._laser.start_terascan(scantype)
+#        return
 
 #From logic/spectrum.py
     def save_spectrum_data(self, background=False, name_tag='', custom_header=None):
@@ -443,6 +448,13 @@ class M2LaserLogic(CounterLogic):
 
             @return error: 0 is OK, -1 is error
         """
+        #First start the laser scan
+        #   Send TCP message to M2 laser to start the terascan
+        self._laser.setup_terascan(self.scanParams["scantype"], tuple([1E9*x for x in self.scanParams["scanbounds"]]),
+                                   self.scanParams["scanrate"])
+        self._laser.start_terascan(self.scanParams["scantype"])
+
+
         # Sanity checks
         constraints = self.get_hardware_constraints()
         # TODO: BUG FIXED HERE: introduce corresponding changes to GitHub files

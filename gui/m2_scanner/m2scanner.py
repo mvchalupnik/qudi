@@ -319,11 +319,11 @@ class M2ScannerGUI(GUIBase):
             #   Stop the counter
             self.sigStopCounter.emit()
 
-            #   Stop the terascan
-            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
-            self._laser_logic._laser.stop_terascan(scantype, True) #
+ #           #   Stop the terascan
+ #           startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+ #           self._laser_logic._laser.stop_terascan(scantype, True) #
 
-            #   Enable the "start/stop scan" button
+            #   Enable the "start/stop scan" button Todo maybe wait for signal before enable?
             self._mw.run_scan_Action.setEnabled(True)
         else:
             print('START TERASCAN')
@@ -351,8 +351,12 @@ class M2ScannerGUI(GUIBase):
                 error_dialog.exec()
                 return self._laser_logic.module_state()
 
-            #   Send TCP message to M2 laser to start the terascan
-            self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
+            #   save terascan parameters to laser module
+            self._laser_logic.scanParams = {"scanbounds": (startWvln, stopWvln), "scantype":scantype,
+                "scanrate":scanrate, "numScans":numScans}
+
+     #       #   Send TCP message to M2 laser to start the terascan
+     #       self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
             #   Start the counter
             self.sigStartCounter.emit()
 
