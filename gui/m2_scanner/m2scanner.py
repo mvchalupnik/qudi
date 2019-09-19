@@ -81,20 +81,18 @@ class M2ScannerGUI(GUIBase):
         self._mw.run_scan_Action.triggered.connect(self.start_clicked)  # start_clicked then triggers sigStartCounter
         self._mw.save_scan_Action.triggered.connect(self.save_spectrum_data)  # start_clicked then triggers sigStartCounter
         self._mw.actionSave_as.triggered.connect(self.change_filepath)
-        #       self._mw.save_scan_Action.triggered.connect(self.save_clicked) #there is no save_clicked function
-        # self._mw.save_spectrum_Action.triggered.connect(self.save_spectrum_data)
         #      self._mw.restore_default_view_Action.triggered.connect(self.restore_default_view)
 
         # FROM countergui.py
         # Connect signals for counter
         self.sigStartCounter.connect(self._laser_logic.startCount)
         self.sigStopCounter.connect(self._laser_logic.stopCount)
-        self._laser_logic.sigScanComplete.connect(self.scanComplete) #just added
+        self._laser_logic.sigScanComplete.connect(self.scanComplete) #handle the end of scans
 
         # Handling signals from the logic
         #   signals during terascan
         self._laser_logic.sigCounterUpdated.connect(self.update_data)
-        #   signals not during terascans
+        #   update wavelength reading and status reading only
         self._laser_logic.sigUpdate.connect(self.updateGui)
 
 
@@ -146,7 +144,7 @@ class M2ScannerGUI(GUIBase):
 
 
         self._pw.setLabel('left', 'Count Rate', units='counts/s')
-        ##self._pw.setLabel('right', 'Counts', units='#') #TODO get rid of or implement
+        ##self._pw.setLabel('right', 'Counts', units='#') #Tget rid of or implement
         self._pw.setLabel('bottom', 'Wavelength', units='nm')
         ##self._pw.setLabel('top', 'Relative Frequency', units='Hz') #TODO implement
 
@@ -162,7 +160,7 @@ class M2ScannerGUI(GUIBase):
         #        symbolSize=5)
         self._pw.addItem(self._curve1)
 
-        #initialize starting values
+        #initialize starting calculated scanning parameters
         self.update_calculated_scan_params()  # initialize
 
         #show the main gui
@@ -185,9 +183,8 @@ class M2ScannerGUI(GUIBase):
             self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
 
-            #startWvln, stopWvln, scantype, scanrate = self.get_scan_info()
-            self._laser_logic._laser.stop_terascan("medium", True) #TODO change to above
-#            self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
+            startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+            self._laser_logic._laser.stop_terascan(scantype, True)
 
 
 
@@ -238,7 +235,7 @@ class M2ScannerGUI(GUIBase):
                 error_dialog.showMessage('ERROR: index given for medium rates is too high')
                 error_dialog.exec()
                 self._mw.scanRate_comboBox.setCurrentIndex(7)
-                return #how is this not broken??
+                return
                 #alternatively (Todo?) change number of scanRate options based on whether we are on Fine or Medium
             else:
                 scanrate = mediumrates[int(self._mw.scanRate_comboBox.currentText())] * 10 ** 9  # in Hz/s
@@ -299,8 +296,8 @@ class M2ScannerGUI(GUIBase):
         """ Update labels, the plot and button states with new data. """
         self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
         self._mw.status_disp.setText(self._laser_logic.current_state)
-#        self.updateButtonsEnabled()
- #       print('updateGui finished in gui')
+
+
 
     def start_clicked(self): #todo: move the logic elements of this function to the logic module
         """ Handling the Start button to stop and restart the counter.
@@ -309,54 +306,58 @@ class M2ScannerGUI(GUIBase):
         if self._laser_logic.module_state() == 'locked':
 
             print('STOP TERASCAN')
-            #We need to make sure the counter stops before the laser check loop starts up again
-            #Should be okay because stop_terascan is set to sync, eg wait for terascan to fully stop
 
+            #   Disable/enable buttons as appropriate, update gui
             self._mw.replot_pushButton.setEnabled(True)
             self._mw.run_scan_Action.setEnabled(False)
 
-            self._mw.status_disp.setText('stopping scan') #is not being seen.?
-            self._laser_logic.current_state = 'stopping scan'
+            self._mw.status_disp.setText('stopping scan') #is not being seen.? fixme
+            self._laser_logic.current_state = 'stopping scan' #is not being seen fixme
 
-            self._mw.run_scan_Action.setText('Start counter')
+            self._mw.run_scan_Action.setText('Start counter') #this also isn't working as far as I can tell fixme
+
+            #   Stop the counter
             self.sigStopCounter.emit()
 
+            #   Stop the terascan
             startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
             self._laser_logic._laser.stop_terascan(scantype, True) #
 
-  #          self._laser_logic.queryTimer.timeout.emit()  # ADDED to restart wavelength check loop
+            #   Enable the "start/stop scan" button
             self._mw.run_scan_Action.setEnabled(True)
         else:
             print('START TERASCAN')
 
+            #   Disable/enable buttons as appropriate, update gui
             #self._laser_logic.current_state = 'starting scan'
             self._mw.status_disp.setText('starting scan')
 
             self._mw.replot_pushButton.setEnabled(False)
             self._mw.run_scan_Action.setEnabled(False)
-            self._mw.run_scan_Action.setText('Stop counter')
+            self._mw.run_scan_Action.setText('Stop counter') #not sure if this is working fixme
 
-            # Adding:
+            #   Grab terascan parameters
             startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
+
+            #   More update gui
             self._mw.scanNumber_label.setText(str(self._laser_logic.repetition_count))
             self._mw.scanNumber_label.setText(
                 "Scan {0:d} of {1:d}".format(self._laser_logic.repetition_count + 1, numScans))
 
-            # Check for input parameter errors. E.G., stop_wavelength should be less than start_wavelength
+            #   Check for input parameter errors. E.G., stop_wavelength should be less than start_wavelength
             if startWvln >= stopWvln:
                 error_dialog = QtWidgets.QErrorMessage()
                 error_dialog.showMessage('ERROR: start wavelength must be less than stop wavelength')
                 error_dialog.exec()
                 return self._laser_logic.module_state()
 
-            ####JUST ADDED
- #           self._laser_logic.stop_query_loop() #careful with this todo look at
-
-            #self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
+            #   Send TCP message to M2 laser to start the terascan
             self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
+            #   Start the counter
             self.sigStartCounter.emit()
-            self._mw.run_scan_Action.setEnabled(True)
 
+            #   Enable clicking of "start/stop" button
+            self._mw.run_scan_Action.setEnabled(True)
 
 #        print('start_clicked finished in gui')
         return self._laser_logic.module_state()
@@ -364,6 +365,7 @@ class M2ScannerGUI(GUIBase):
 
 
     def update_points_checkbox(self):
+    #Change display style of counts plot
         #check if locked?
         if not self._mw.plotPoints_checkBox.isChecked():
             self._curve1.setPen(palette.c1, width=2)
@@ -377,34 +379,38 @@ class M2ScannerGUI(GUIBase):
         #self._pw.addItem(self._curve1)
 
     def replot_pressed(self):
+    #Replot counts to be ordered by wavelength
         if self._laser_logic.module_state() == 'locked':
             pass #Button should be disabled when module_state is locked, so this should never happen anyway
         else:
             self._laser_logic.order_data()
             self.update_data()
-            self._mw.replot_pushButton.setFlat(False)
+            self._mw.replot_pushButton.setFlat(False) #Isn't working? Supposed to reset button style TODO fix
 
     def scanComplete(self):
+    #Handle the end of scans TODO potential threading issues if this is called via a slot but count_loop is called via
+            #a slot afterwards. Check to make sure this will not happen!
         startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
 
-        #don't automatically save if it's just one scan
+
         if numScans != 1:
-            #save scan
-            #saving increases repetition_count by 1
+        # don't automatically save if it's just one scan
+            #save scan. Note: save_spectrum_data increases repetition_count by 1
             self._laser_logic.save_spectrum_data()
 
         if numScans == self._laser_logic.repetition_count or self._laser_logic.repetition_count == 0:
+        # Final scan has been completed.
 
             self._laser_logic.repetition_count = 0
-
             self._mw.replot_pushButton.setEnabled(True)
 
             self._laser_logic.module_state.unlock()
-  #          self._laser_logic.queryTimer.timeout.emit() #restart wavelength updates
+
         else:
+        # Advance to next scan
+
             self._mw.scanNumber_label.setText("Scan {0:d} of {1:d}".format(self._laser_logic.repetition_count + 1, numScans))
 
-            #self._laser_logic.start_terascan("medium", (750, 751), 10E9)  # start terascan
             self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
 
             self._laser_logic.module_state.unlock()

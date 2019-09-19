@@ -134,28 +134,16 @@ class M2LaserLogic(CounterLogic):
         """ Prepare logic module for work.
         """
         self._laser = self.laser()
-#        self.stopRequest = False #duplicate, no -ed
-#        self.bufferLength = 100 #?
-#        self.data = {}
 
-#        # delay timer for querying laser
-#        self.queryTimer = QtCore.QTimer()
-#        self.queryTimer.setInterval(self.queryInterval)
-#        self.queryTimer.setSingleShot(True)
-#
-#        #everytime queryTimer timeout emits a signal, run check_laser_loop
-#        self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.QueuedConnection)
 
         #set up default save_folder
         self.filepath = self._save_logic.get_path_for_module(module_name='spectra')
 
-        # get laser capabilities at start (currently not doing anything with laserstate
- ###       self.laser_state = self._laser.get_laser_state()
-        self.current_wavelength = self._laser.get_wavelength()
+        #Initialize GUI with starting values
+        self.current_wavelength = 'idle'
+        self.current_state = 'idle'
+        #call updateGui TODO
 
-
-     #   self.init_data_logging() #currently is doing nothing, TODO delete
-   #     self.start_query_loop() #why put this here also?
 
 
     def on_deactivate(self):
@@ -171,77 +159,6 @@ class M2LaserLogic(CounterLogic):
 
         self.sigCountDataNext.disconnect()
 
- #       #from laser_logic
- #       """ Deactivate modeule.
- #       """
- #       print('TRYING TO DEACTIVATE in logic')
- #       self.stop_query_loop()
- #       for i in range(5):
- #           time.sleep(self.queryInterval / 1000)
- #           QtCore.QCoreApplication.processEvents()
-
-
-
-  #  #TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
-  #  #This is adapted from original laser_logic
-  #  @QtCore.Slot()
-  #  def check_laser_loop(self):
-  #      print('check_laser_loop called in logic')
-  #      """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
-  #      if self.stopRequest: #no -ed
-  #          if self.module_state.can('stop'):
-  #              self.module_state.stop()
-  #          self.stopRequest = False #no -ed
-  #          return
-  #      qi = self.queryInterval
-  #      try:
-  #          #print('laserloop', QtCore.QThread.currentThreadId())
-  #          self.current_wavelength = self._laser.get_wavelength()
- #           self.current_state = 'idle'
- #           pass
-#
-#        except:
-  #          print('in check_laser_loop exception')
-            #qi = 3000
-            #self.log.exception("Exception in laser status loop, throttling refresh rate.")
- #           return #this improved stability, and somehow didn't stop check_laser_loop
-                #from working... not sure what to make of that... does SingleShot not work?
-                #maybe while testing I haven't actually accessed this?
-
- #       self.queryTimer.start(qi)
- #       self.sigUpdate.emit() #sigUpdate is connected to updateGUI in m2scanner.py gui file
-  #      print('check_laser_loop finished in logic')
-
-
-  #  @QtCore.Slot()
-  #  def start_query_loop(self):
-  #      """ Start the readout loop. """
- #       print('start_query_loop called in logic')
-      #  self.module_state.run()
-  #      self.queryTimer.start(self.queryInterval)
- #       print('start_query_loop finished in logic')
-
- #   @QtCore.Slot()
- #   def stop_query_loop(self):
- #   #    print('stop_query_loop called in logic')
- #       """ Stop the readout loop. """
- #       self.stopRequest = True #no -ed
- #       for i in range(10):
- #           if not self.stopRequest: #no -ed
- #               return
- #           QtCore.QCoreApplication.processEvents() #?
- #           time.sleep(self.queryInterval/1000)
- #   #    print('stop_query_loop finished in logic')
-
-  #  def init_data_logging(self): #todo: delete?
-  #      """ Zero all log buffers. """
-  #      print('To implement')
-    #    self.data['current'] = np.zeros(self.bufferLength)
-    #    self.data['power'] = np.zeros(self.bufferLength)
-    #    self.data['time'] = np.ones(self.bufferLength) * time.time()
-    #    temps = self._laser.get_temperatures()
-    #    for name in temps:
-    #        self.data[name] = np.zeros(self.bufferLength)
 
 
     #overload from counter_logic.py
@@ -278,9 +195,11 @@ class M2LaserLogic(CounterLogic):
                 # read the current counter value.
                 #national_instruments_x_series.py is set up to return an array with a length dependent on
                 #the counter clock frequency. To integrate over counts, just sum this array along the correct dimension
-                #TODO, check this with a real photodiode by printing and seeing if it does give an array
+                #FIXME: problem: get_counter does not actually return an array (checked with apd connected)
                 self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
-
+                #print('is this an array')
+                #print(self.rawdata.shape)
+                #print(self.rawdata)
 
                 numSamples = self.rawdata.shape[0]
                 self.rawdata = np.sum(self.rawdata, axis=1)
@@ -374,7 +293,7 @@ class M2LaserLogic(CounterLogic):
             # if we don't want to use oversampling
             else:
                 # append tuple to data stream (timestamp, average counts)
-                chans = self.get_channels() #this should always be 2 for us!!! todo error if not
+                chans = self.get_channels()
                 newdata = np.empty((len(chans) + 1, ))
                 newdata[0] = time.time() - self._saving_start_time
                 for i in range(len(chans) +1):
@@ -386,12 +305,9 @@ class M2LaserLogic(CounterLogic):
 
 
     @QtCore.Slot()
-    def start_terascan(self,scantype, scanbounds, scanrate): #added, possibly/probably unecessary - could do straight in gui.
-        #but maybe we don't want the gui talking directly to hardware?
- #       print('start_terascan called in logic')
+    def start_terascan(self,scantype, scanbounds, scanrate):
         self._laser.setup_terascan(scantype, tuple([1E9*x for x in scanbounds]), scanrate)
         self._laser.start_terascan(scantype)
- #       print('start terascan finished in logic')
         return
 
 #From logic/spectrum.py
