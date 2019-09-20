@@ -324,7 +324,7 @@
               <double>0.010000000000000</double>
              </property>
              <property name="value">
-              <double>740.000000000000000</double>
+              <double>737.149999999999977</double>
              </property>
             </widget>
            </item>
@@ -365,6 +365,9 @@
                <width>120</width>
                <height>30</height>
               </size>
+             </property>
+             <property name="currentIndex">
+              <number>-1</number>
              </property>
             </widget>
            </item>
@@ -447,7 +450,7 @@
               <double>0.010000000000000</double>
              </property>
              <property name="value">
-              <double>741.000000000000000</double>
+              <double>737.250000000000000</double>
              </property>
             </widget>
            </item>
@@ -570,6 +573,15 @@
             <widget class="QPushButton" name="replot_pushButton">
              <property name="text">
               <string>Replot</string>
+             </property>
+             <property name="autoDefault">
+              <bool>false</bool>
+             </property>
+             <property name="default">
+              <bool>false</bool>
+             </property>
+             <property name="flat">
+              <bool>false</bool>
              </property>
             </widget>
            </item>
