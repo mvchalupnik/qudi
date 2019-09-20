@@ -360,6 +360,7 @@ laser.stop_terascan("medium")"""
         #use this function to get the wavelength while terascan is running
         #currently calls to this function take ~.21 sec
         timeouted = self.flush(1000000)
+        #TODO: try experimenting with not using flush, to decrease time it takes to call this function
 
         if timeouted == -1: #timeout or some other error in flush()
             #assume this means the scan is done, even though there are other possible reasons for this to occur
@@ -371,7 +372,7 @@ laser.stop_terascan("medium")"""
 
         if out.get('report'): #I think this means we happened to land on the report end status update
             #(unlikely since we are constantly grabbing one update out of many)
-            print(out)
+            #print(out)
             return -1, 'complete'
 
 
@@ -379,7 +380,7 @@ laser.stop_terascan("medium")"""
             status = out['activity']
         else:
             status = 'stitching'
-            print(out)
+            #print(out)
 
         return out['wavelength'][0], status
 
@@ -411,7 +412,7 @@ laser.stop_terascan("medium")"""
         """Stop fine wavelength tuning."""
        # _, reply = self.send("stop_wave_m", {})
         _, reply = self.send("stop_move_wave_t", {})
-        print(reply)
+       # print(reply)
         if reply[-1]["status"][0] == 1:
             print('-1')
             #self.log.warning("can't stop tuning: no wavemeter link")

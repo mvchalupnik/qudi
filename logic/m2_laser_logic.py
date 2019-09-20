@@ -212,8 +212,13 @@ class M2LaserLogic(CounterLogic):
                 #potentially error I am seeing: stop is pressed while process flow is about here.
                 #key error as laser scan stops but this function still searches for wavelength todo fix
 
+             #   t1 = time.time()
                 #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
                 wavelength, current_state = self._laser.get_terascan_wavelength()
+             #   t2 = time.time()
+             #   print(t2 - t1)
+             #   print(wavelength)
+             #   print(current_state)
 
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
