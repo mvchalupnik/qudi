@@ -174,7 +174,7 @@ class M2LaserLogic(CounterLogic):
                 # check for aborts of the thread in break if necessary
 
                 if self.stopRequested: #modified -ed
-                    self.current_state = 'stopping scan'
+                    self.current_state = 'scan stopped'
                     ##self.sigUpdate.emit() #show state change 'stopping scan'
                     # close off the actual counter
                     cnt_err = self._counting_device.close_counter()
@@ -188,9 +188,8 @@ class M2LaserLogic(CounterLogic):
 
                     # switch the state variable off again
                     self.stopRequested = False #modified -ed
-                    self.module_state.unlock() #...!? wait to unlock until laser is finished stopping scan!
-                                                #does not matter, since the query loop side of things does not
-                                                #even use module_state.lock/unlock
+                    self.module_state.unlock()
+
        #             self.sigCounterUpdated.emit() #plot last data bits?
                     return
 
@@ -219,12 +218,16 @@ class M2LaserLogic(CounterLogic):
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
             #        print('stitching')
+                    self.current_wavelength = wavelength
+                    self.current_state = current_state
+                    self.sigUpdate.emit()
                     self.sigCountDataNext.emit()
                     return
 
                 #Handle finished scan
                 if current_state == 'complete': #timeout in get_terascan_wavelength(), LOOK AT, is there a better way to handle???? TODO
-                    print('complete')
+                    self.current_state = 'scan completing'
+                    self.sigUpdate.emit()
                     cnt_err = self._counting_device.close_counter()
                     clk_err = self._counting_device.close_clock()
                     self.sigScanComplete.emit()

@@ -163,6 +163,10 @@ class M2ScannerGUI(GUIBase):
         #initialize starting calculated scanning parameters
         self.update_calculated_scan_params()  # initialize
 
+        #
+        self._mw.wvlnRead_disp.setText("Laser Connected")
+        self._mw.status_disp.setText("idle")
+
         #show the main gui
         self._mw.show()
 
@@ -211,8 +215,6 @@ class M2ScannerGUI(GUIBase):
         if data.shape[1] > 0:
             self._curve1.setData(x=data[0, :], y=data[1, :])
  #       print('updatedata finished in gui')
-
-
 
 
     def save_spectrum_data(self):
@@ -290,7 +292,6 @@ class M2ScannerGUI(GUIBase):
 
 
 
-    #from laser.py gui
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
@@ -318,10 +319,6 @@ class M2ScannerGUI(GUIBase):
 
             #   Stop the counter
             self.sigStopCounter.emit()
-
- #           #   Stop the terascan
- #           startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
- #           self._laser_logic._laser.stop_terascan(scantype, True) #
 
             #   Enable the "start/stop scan" button Todo maybe wait for signal before enable?
             self._mw.run_scan_Action.setEnabled(True)
@@ -355,8 +352,7 @@ class M2ScannerGUI(GUIBase):
             self._laser_logic.scanParams = {"scanbounds": (startWvln, stopWvln), "scantype":scantype,
                 "scanrate":scanrate, "numScans":numScans}
 
-     #       #   Send TCP message to M2 laser to start the terascan
-     #       self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
+
             #   Start the counter
             self.sigStartCounter.emit()
 
@@ -389,13 +385,14 @@ class M2ScannerGUI(GUIBase):
         else:
             self._laser_logic.order_data()
             self.update_data()
-            self._mw.replot_pushButton.setFlat(False) #Isn't working? Supposed to reset button style TODO fix
+           ### self._mw.replot_pushButton.setDefault(False) #Isn't working? Supposed to reset button style TODO fix
 
     def scanComplete(self):
-    #Handle the end of scans TODO potential threading issues if this is called via a slot but count_loop is called via
-            #a slot afterwards. Check to make sure this will not happen!
+    #Handle the end of scans
         startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
 
+        self._mw.wvlnRead_disp.setText("Scan Completed")
+        self._mw.status_disp.setText("idle")
 
         if numScans != 1:
         # don't automatically save if it's just one scan
@@ -414,8 +411,6 @@ class M2ScannerGUI(GUIBase):
         # Advance to next scan
 
             self._mw.scanNumber_label.setText("Scan {0:d} of {1:d}".format(self._laser_logic.repetition_count + 1, numScans))
-
-            self._laser_logic.start_terascan(scantype, (startWvln, stopWvln), scanrate)  # start terascan
 
             self._laser_logic.module_state.unlock()
             self.sigStartCounter.emit() #clears out data, etc.
