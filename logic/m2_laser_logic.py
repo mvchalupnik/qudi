@@ -145,6 +145,33 @@ class M2LaserLogic(CounterLogic):
         #call updateGui TODO
 
 
+        #Prepare fit logic
+        self._fit_logic = self.fitlogic()
+        self.fc = self._fit_logic.make_fit_container('Wavemeter counts', '1d')
+        self.fc.set_units(['Hz', 'c/s'])
+
+        if 'fits' in self._statusVariables and isinstance(self._statusVariables['fits'], dict):
+            self.fc.load_from_dict(self._statusVariables['fits'])
+        else:
+            d1 = OrderedDict()
+            d1['Lorentzian peak'] = {
+                'fit_function': 'lorentzian',
+                'estimator': 'peak'
+            }
+            d1['Two Lorentzian peaks'] = {
+                'fit_function': 'lorentziandouble',
+                'estimator': 'peak'
+            }
+            d1['Two Gaussian peaks'] = {
+                'fit_function': 'gaussiandouble',
+                'estimator': 'peak'
+            }
+            default_fits = OrderedDict()
+            default_fits['1d'] = d1
+            self.fc.load_from_dict(default_fits)
+
+
+
 
     def on_deactivate(self):
         #taken from counter_logic: (not sure if neccessary?)
@@ -200,10 +227,12 @@ class M2LaserLogic(CounterLogic):
                 #national_instruments_x_series.py is set up to return an array with a length dependent on
                 #the counter clock frequency. To integrate over counts, just sum this array along the correct dimension
                 #FIXME: problem: get_counter does not actually return an array (checked with apd connected)
-                self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
+#                self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
+                self.rawdata = self._counting_device.get_counter(samples=25) #2000 too big LOOK should be 1/clock freq
+
                 #print('is this an array')
                 #print(self.rawdata.shape)
-                #print(self.rawdata)
+            ##    print(self.rawdata)
 
                 numSamples = self.rawdata.shape[0]
                 self.rawdata = np.sum(self.rawdata, axis=1)
