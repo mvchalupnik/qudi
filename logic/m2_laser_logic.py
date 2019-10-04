@@ -84,11 +84,12 @@ class M2LaserLogic(CounterLogic):
     counter1 = Connector(interface='SlowCounterInterface')
     savelogic = Connector(interface='SaveLogic')
 
-    # status vars
-    _smooth_window_length = StatusVar('smooth_window_length', 10) #these may not do anything
-    _counting_samples = StatusVar('counting_samples', 1)
-    _count_frequency = StatusVar('count_frequency', 50)
-    _saving = StatusVar('saving', False)
+    # status vars: These must be adjusted in init function (below commented lines do nothing when uncommented)
+    #which is in counter_logic.py (m2_laser_logic.py extends this)
+#    _smooth_window_length = StatusVar('smooth_window_length', 10) #these may not do anything
+#    _counting_samples = StatusVar('counting_samples', 1)
+#    _count_frequency = StatusVar('count_frequency', 50)
+  #  _saving = StatusVar('saving', False)
 
 
     def on_activate(self):
@@ -223,12 +224,23 @@ class M2LaserLogic(CounterLogic):
                 #read the current wavelength value here as well, average with below val?
 
 
-                # read the current counter value.
                 #national_instruments_x_series.py is set up to return an array with a length dependent on
                 #the counter clock frequency. To integrate over counts, just sum this array along the correct dimension
-                #FIXME: problem: get_counter does not actually return an array (checked with apd connected)
+
 #                self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
-                self.rawdata = self._counting_device.get_counter(samples=25) #2000 too big LOOK should be 1/clock freq
+             #   self.rawdata = self._counting_device.get_counter(samples=25) #Adjust As Neccessary
+
+
+                #time elapsed since last call in seconds * samples logged per second
+                #samples logged per second = clock rate for counter (daq)
+                #0.2 sec * self._count_frequency = 0.2 sec * 50 cts per sec = 10
+                #Keep in mind get_counter is a blocking function so it will block until all the counts are filled
+                #Lagging in counts displayed is observed when samples supplied here was too small
+                #But stalling when get_counter is called is observed when samples supplied is too large
+                self.rawdata = self._counting_device.get_counter(samples=round(self._count_frequency*0.2) + 15)
+                #Ideally, we figure out how to shrink the time for samples logged per second down much more so that
+                #get_counter would always be the limiting step
+
 
                 #print('is this an array')
                 #print(self.rawdata.shape)
