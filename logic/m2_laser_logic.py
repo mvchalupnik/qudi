@@ -83,6 +83,7 @@ class M2LaserLogic(CounterLogic):
     ## declare connectors
     counter1 = Connector(interface='SlowCounterInterface')
     savelogic = Connector(interface='SaveLogic')
+    fitlogic = Connector(interface='FitLogic')
 
     # status vars: These must be adjusted in init function (below commented lines do nothing when uncommented)
     #which is in counter_logic.py (m2_laser_logic.py extends this)
@@ -96,11 +97,38 @@ class M2LaserLogic(CounterLogic):
         ############## Counter related on_activate tasks:
         # Connect to hardware and save logic
         print('on_activate is called in m2_laser_logic')
+
+        self._fit_logic = self.fitlogic()
+        self.fc = self._fit_logic.make_fit_container('Wavemeter counts', '1d')
+        self.fc.set_units(['Hz', 'c/s'])
+
+        if 'fits' in self._statusVariables and isinstance(self._statusVariables['fits'], dict):
+            self.fc.load_from_dict(self._statusVariables['fits'])
+        else:
+            d1 = OrderedDict()
+            d1['Lorentzian peak'] = {
+                'fit_function': 'lorentzian',
+                'estimator': 'peak'
+            }
+            d1['Two Lorentzian peaks'] = {
+                'fit_function': 'lorentziandouble',
+                'estimator': 'peak'
+            }
+            d1['Two Gaussian peaks'] = {
+                'fit_function': 'gaussiandouble',
+                'estimator': 'peak'
+            }
+            default_fits = OrderedDict()
+            default_fits['1d'] = d1
+            self.fc.load_from_dict(default_fits)
+
+
+
         self._counting_device = self.counter1()
         self._save_logic = self.savelogic()
 
         # Overwrite count_length from counter_logic so that we can have data longer than 300 points
-        self._count_length = 1000000
+        self._count_length = 100000 #1000000
 
 
         # Recall saved app-parameters
@@ -239,7 +267,8 @@ class M2LaserLogic(CounterLogic):
                 #But stalling when get_counter is called is observed when samples supplied is too large
                 self.rawdata = self._counting_device.get_counter(samples=round(self._count_frequency*0.2) + 15)
                 #Ideally, we figure out how to shrink the time for samples logged per second down much more so that
-                #get_counter would always be the limiting step
+                #get_counter would always be the time-limiting step
+                #to do this we have to change the way wavelength is read
 
 
                 #print('is this an array')
