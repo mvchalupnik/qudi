@@ -41,7 +41,7 @@ class M2ControllerWindow(QtWidgets.QMainWindow):
         """
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'ui_m2scanner_new2.ui') #modified
+        ui_file = os.path.join(this_dir, 'ui_m2scanner_withfit.ui') #modified
 
         # Load it
         super().__init__()
@@ -169,6 +169,17 @@ class M2ScannerGUI(GUIBase):
 
         #show the main gui
         self._mw.show()
+
+        # fit settings #just added!
+        self._fsd = FitSettingsDialog(self._laser_logic.fc)
+        self._fsd.sigFitsUpdated.connect(self._mw.fit_methods_ComboBox.setFitFunctions)
+        self._fsd.applySettings()
+
+        self._mw.action_FitSettings.triggered.connect(self._fsd.show)
+        self._mw.do_fit_PushButton.clicked.connect(self.doFit)
+        self.sigDoFit.connect(self._wm_logger_logic.do_fit)
+        self.sigFitChanged.connect(self._wm_logger_logic.fc.set_current_fit)
+      ###  self._wm_logger_logic.sig_fit_updated.connect(self.updateFit) #TODO
 
     def on_deactivate(self):
         """ Deinitialisation performed during deactivation of the module.
