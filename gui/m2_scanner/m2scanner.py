@@ -41,7 +41,7 @@ class M2ControllerWindow(QtWidgets.QMainWindow):
         """
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'ui_m2scanner_withfit.ui') #modified
+        ui_file = os.path.join(this_dir, 'ui_m2scanner_withfit4.ui') #modified
 
         # Load it
         super().__init__()
@@ -55,6 +55,9 @@ class M2ScannerGUI(GUIBase):
 
     sigStartCounter = QtCore.Signal()
     sigStopCounter = QtCore.Signal()
+
+    sigFitChanged = QtCore.Signal(str)
+    sigDoFit = QtCore.Signal()
 
 
     # declare connectors
@@ -177,9 +180,15 @@ class M2ScannerGUI(GUIBase):
 
         self._mw.action_FitSettings.triggered.connect(self._fsd.show)
         self._mw.do_fit_PushButton.clicked.connect(self.doFit)
-        self.sigDoFit.connect(self._wm_logger_logic.do_fit)
-        self.sigFitChanged.connect(self._wm_logger_logic.fc.set_current_fit)
-      ###  self._wm_logger_logic.sig_fit_updated.connect(self.updateFit) #TODO
+        self.sigDoFit.connect(self._laser_logic.do_fit)
+        self.sigFitChanged.connect(self._laser_logic.fc.set_current_fit)
+        self._laser_logic.sig_fit_updated.connect(self.updateFit) #TODO
+
+        self.curve_fit = pg.PlotDataItem(
+            pen=pg.mkPen(palette.c2, width=3),
+            symbol=None
+            )
+
 
     def on_deactivate(self):
         """ Deinitialisation performed during deactivation of the module.
@@ -431,6 +440,43 @@ class M2ScannerGUI(GUIBase):
         self._laser_logic.filepath = save_dialog.getExistingDirectory()
         print('Saving in ' + self._laser_logic.filepath)
         self.save_spectrum_data()
+
+    @QtCore.Slot()
+    def doFit(self):
+        self.sigFitChanged.emit(self._mw.fit_methods_ComboBox.getCurrentFit()[0])
+        self.sigDoFit.emit()
+
+
+    @QtCore.Slot()
+    def updateFit(self):
+        """ Do the configured fit and show it in the plot """
+        fit_name = self._laser_logic.fc.current_fit
+        fit_result = self._laser_logic.fc.current_fit_result
+        fit_param = self._laser_logic.fc.current_fit_param
+
+        if fit_result is not None:
+            # display results as formatted text
+            self._mw.fit_results_DisplayWidget.clear()
+            try:
+                formated_results = units.create_formatted_output(fit_result.result_str_dict)
+            except:
+                formated_results = 'this fit does not return formatted results'
+            self._mw.fit_results_DisplayWidget.setPlainText(formated_results)
+
+        if fit_name is not None:
+            self._mw.fit_methods_ComboBox.setCurrentFit(fit_name)
+
+        # check which fit method is used and show the curve in the plot accordingly
+        if fit_name != 'No Fit':
+            self.curve_fit.setData(
+                x=self._laser_logic.wlog_fit_x,
+                y=self._laser_logic.wlog_fit_y)
+
+            if self.curve_fit not in self._mw.plotWidget.listDataItems():
+                self._mw.plotWidget.addItem(self.curve_fit)
+        else:
+            if self.curve_fit in self._mw.plotWidget.listDataItems():
+                self._mw.plotWidget.removeItem(self.curve_fit)
 
 
 #https://doc.qt.io/qt-5/signalsandslots.html

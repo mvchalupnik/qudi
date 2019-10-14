@@ -62,9 +62,10 @@ class M2LaserLogic(CounterLogic):
     queryInterval = ConfigOption('query_interval', 100) #needed for wavemeter
 
     sigUpdate = QtCore.Signal()
-    sigStartScan = QtCore.Signal() #Just added
+#    sigStartScan = QtCore.Signal() #todelete
 
-
+    #Added from wavemeter_logger_logic
+    sig_fit_updated = QtCore.Signal()
 
     #############    Adapted from CounterLogic
     sigCounterUpdated = QtCore.Signal()
@@ -97,31 +98,6 @@ class M2LaserLogic(CounterLogic):
         ############## Counter related on_activate tasks:
         # Connect to hardware and save logic
         print('on_activate is called in m2_laser_logic')
-
-        self._fit_logic = self.fitlogic()
-        self.fc = self._fit_logic.make_fit_container('Wavemeter counts', '1d')
-        self.fc.set_units(['Hz', 'c/s'])
-
-        if 'fits' in self._statusVariables and isinstance(self._statusVariables['fits'], dict):
-            self.fc.load_from_dict(self._statusVariables['fits'])
-        else:
-            d1 = OrderedDict()
-            d1['Lorentzian peak'] = {
-                'fit_function': 'lorentzian',
-                'estimator': 'peak'
-            }
-            d1['Two Lorentzian peaks'] = {
-                'fit_function': 'lorentziandouble',
-                'estimator': 'peak'
-            }
-            d1['Two Gaussian peaks'] = {
-                'fit_function': 'gaussiandouble',
-                'estimator': 'peak'
-            }
-            default_fits = OrderedDict()
-            default_fits['1d'] = d1
-            self.fc.load_from_dict(default_fits)
-
 
 
         self._counting_device = self.counter1()
@@ -199,7 +175,15 @@ class M2LaserLogic(CounterLogic):
             default_fits['1d'] = d1
             self.fc.load_from_dict(default_fits)
 
-
+        # #JUST ADDED below
+        # # create a new x axis from xmin to xmax with bins points
+        # self.histogram_axis = np.arange(
+        #     self._xmin,
+        #     self._xmax,
+        #     (self._xmax - self._xmin) / self._bins
+        #     )
+        # self.histogram = np.zeros(self.histogram_axis.shape)
+        # self.envelope_histogram = np.zeros(self.histogram_axis.shape)
 
 
     def on_deactivate(self):
@@ -590,3 +574,58 @@ class M2LaserLogic(CounterLogic):
             self.sigCountStatusChanged.emit(True)
             self.sigCountDataNext.emit()
             return
+
+    def get_fit_functions(self):
+        """ Return the names of all ocnfigured fit functions.
+        @return list(str): list of fit function names
+        """
+        return self.fc.fit_list.keys()
+
+    def bin_data(self):
+
+        #order data
+        self.order_data()
+        data = self.countdata
+
+        #Don't include initialization 0's
+        mask = (data==0).all(0)
+        start_idx = np.argmax(~mask)
+        data = data[:,start_idx:]
+
+        x_wvln_min = np.min(data[0,:])
+        x_wvln_max = np.max(data[0,:])
+
+        #bin the data
+        binnum = len(data[0,:]) - 1#not sure if this is best
+
+        self.binneddata_x = np.linspace(x_wvln_min, x_wvln_max, binnum)
+        self.binneddata_y = np.zeros(binnum)
+
+        for n in range(0,len(data[0,:])): #i'm sure there is a less ugly way than this
+            ct = data[1,n]
+            arr = self.binneddata_x - data[0,n]
+            if arr[arr > 0].size != 0: #not empty
+                bn = np.where(arr == np.min(arr[arr > 0]))
+            else:
+                bn = binnum - 1
+
+            self.binneddata_y[bn] = self.binneddata_y[bn] + ct
+
+
+
+
+    def do_fit(self):
+        """ Execute the currently configured fit
+        """
+
+        self.bin_data()
+
+        self.wlog_fit_x, self.wlog_fit_y, result = self.fc.do_fit(
+            self.binneddata_x,
+            self.binneddata_y
+            #self.histogram_axis, #does it need to be a regularly spaced linspace???
+            #self.histogram   #where do uncertainties come in????? How can I implement y-axis uncertainty?
+        )
+
+        self.sig_fit_updated.emit()
+        ######self.sig_data_updated.emit()
