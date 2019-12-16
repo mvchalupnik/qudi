@@ -34,8 +34,7 @@ from toptica.lasersdk.asyncio.dlcpro.v2_0_1 import DLCpro, NetworkConnection
 class TopticaLaser(): #To do delete this line
 #####class TopticaLaser(Base, SimpleLaserInterface):
 
-conn1 = NetworkConnection('10.0.0.2')
-
+conn1 = SerialConnection('COM1')
 
     _modclass = 'topticalaser'
     _modtype = 'hardware'
