@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-This module acts like a laser.
+For toptica laser control
+https://toptica.github.io/python-lasersdk/getting_started.html
+
 
 Qudi is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,11 +32,20 @@ import time
 
 import asyncio
 from toptica.lasersdk.asyncio.dlcpro.v2_0_1 import DLCpro, NetworkConnection
+from toptica.lasersdk.client import SerialConnection, Client
 
-class TopticaLaser(): #To do delete this line
-#####class TopticaLaser(Base, SimpleLaserInterface):
+###class TopticaLaser(): #To do delete this line
+class TopticaLaser(Base, SimpleLaserInterface):
 
-conn1 = SerialConnection('COM1')
+    conn1 = SerialConnection('COM3')
+    print('I AM HERE')
+
+    with Client(SerialConnection('COM3')) as client:
+        print(client.get('system-label', str))
+        client.set('system-label', 'Please do not touch!')
+        print('I MADE IT HERE')
+
+    print('NOW HERE')
 
     _modclass = 'topticalaser'
     _modtype = 'hardware'
