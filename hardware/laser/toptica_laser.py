@@ -3,6 +3,11 @@
 For toptica laser control
 https://toptica.github.io/python-lasersdk/getting_started.html
 
+Make sure to install usb driver
+Follow:
+https://www.toptica.com/products/tunable-diode-lasers/laser-driving-electronics/dlc-pro/#c2326
+Download and extract
+Right click on "dlcpro-usb-serial.inf" file and click install
 
 Qudi is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
