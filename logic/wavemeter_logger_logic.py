@@ -125,14 +125,14 @@ class WavemeterLoggerLogic(GenericLogic):
         self.threadlock = Mutex()
 
         self._acqusition_start_time = 0
-        self._bins = 200
+        self._bins = 1000 #MODIFY THIS (can also change in gui)
         self._data_index = 0
 
         self._recent_wavelength_window = [0, 0]
         self.counts_with_wavelength = []
 
-        self._xmin = 650
-        self._xmax = 750
+        self._xmin = 737.65 #MODIFY THIS (can also change in gui)
+        self._xmax = 737.68 #MODIFY THIS (can also change in gui)
         # internal min and max wavelength determined by the measured wavelength
         self.intern_xmax = -1.0
         self.intern_xmin = 1.0e10
@@ -290,7 +290,8 @@ class WavemeterLoggerLogic(GenericLogic):
             self._counter_logic.startCount()
 
         if self._counter_logic.get_saving_state():
-            self._counter_logic.save_data()
+  #          self._counter_logic.save_data()
+            pass #Commented for now 12/24/19
 
         self._wavemeter_device.start_acqusition()
 
@@ -465,6 +466,8 @@ class WavemeterLoggerLogic(GenericLogic):
 
             # the plot data is the summed counts divided by the occurence of the respective bins
             self.histogram = self.rawhisto / self.sumhisto
+            #print(self.rawhisto)
+            #print(self.sumhisto)
 
     def save_data(self, timestamp=None):
         """ Save the counter trace data and writes it to a file.

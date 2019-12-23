@@ -176,7 +176,7 @@ class WavemeterLogGui(GUIBase):
         self._fsd.sigFitsUpdated.connect(self._mw.fit_methods_ComboBox.setFitFunctions)
         self._fsd.applySettings()
 
-        self._mw.actionFit_settings.triggered.connect(self._fsd.show)
+  #      self._mw.action_FitSettings.triggered.connect(self._fsd.show) #commented to debug
         self._mw.do_fit_PushButton.clicked.connect(self.doFit)
         self.sigDoFit.connect(self._wm_logger_logic.do_fit)
         self.sigFitChanged.connect(self._wm_logger_logic.fc.set_current_fit)
