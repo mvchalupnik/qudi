@@ -315,7 +315,10 @@ class M2ScannerGUI(GUIBase):
     @QtCore.Slot()
     def updateGui(self):
         """ Update labels, the plot and button states with new data. """
-        self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
+        try:
+            self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
+        except:
+            print('current wavelength not numeric')
         self._mw.status_disp.setText(self._laser_logic.current_state)
 
 
@@ -367,6 +370,9 @@ class M2ScannerGUI(GUIBase):
                 error_dialog.showMessage('ERROR: start wavelength must be less than stop wavelength')
                 error_dialog.exec()
                 return self._laser_logic.module_state()
+
+            ####JUST ADDED
+            self._laser_logic.stop_query_loop()  # careful with this todo look at
 
             #   save terascan parameters to laser module
             self._laser_logic.scanParams = {"scanbounds": (startWvln, stopWvln), "scantype":scantype,
@@ -426,6 +432,7 @@ class M2ScannerGUI(GUIBase):
             self._mw.replot_pushButton.setEnabled(True)
 
             self._laser_logic.module_state.unlock()
+            #self._laser_logic.start_query_loop() #not best place for this - todo move
 
         else:
         # Advance to next scan
@@ -434,6 +441,7 @@ class M2ScannerGUI(GUIBase):
 
             self._laser_logic.module_state.unlock()
             self.sigStartCounter.emit() #clears out data, etc.
+
 
     def change_filepath(self):
         save_dialog = QtWidgets.QFileDialog()

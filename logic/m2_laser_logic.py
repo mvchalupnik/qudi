@@ -62,7 +62,7 @@ class M2LaserLogic(CounterLogic):
     queryInterval = ConfigOption('query_interval', 100) #needed for wavemeter
 
     sigUpdate = QtCore.Signal()
-#    sigStartScan = QtCore.Signal() #todelete
+    sigStartScan = QtCore.Signal() #todelete
 
     #Added from wavemeter_logger_logic
     sig_fit_updated = QtCore.Signal()
@@ -88,10 +88,10 @@ class M2LaserLogic(CounterLogic):
 
     # status vars: These must be adjusted in init function (below commented lines do nothing when uncommented)
     #which is in counter_logic.py (m2_laser_logic.py extends this)
-#    _smooth_window_length = StatusVar('smooth_window_length', 10) #these may not do anything
-#    _counting_samples = StatusVar('counting_samples', 1)
-#    _count_frequency = StatusVar('count_frequency', 50)
-  #  _saving = StatusVar('saving', False)
+ #   _smooth_window_length = StatusVar('smooth_window_length', 10) #these may not do anything
+ #   _counting_samples = StatusVar('counting_samples', 1)
+ #   _count_frequency = StatusVar('count_frequency', 50)
+ #   _saving = StatusVar('saving', False)
 
 
     def on_activate(self):
@@ -139,6 +139,18 @@ class M2LaserLogic(CounterLogic):
         """ Prepare logic module for work.
         """
         self._laser = self.laser()
+        self._laser.enable_terascan_updates() #just added
+        #self.stopRequest = False  # duplicate, no -ed
+        #self.bufferLength = 100  # ?
+        #self.data = {}
+
+        # delay timer for querying laser
+        self.queryTimer = QtCore.QTimer()
+        self.queryTimer.setInterval(self.queryInterval)
+        self.queryTimer.setSingleShot(True)
+
+        #everytime queryTimer timeout emits a signal, run check_laser_loop
+        self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.QueuedConnection)
 
 
         #set up default save_folder
@@ -185,6 +197,7 @@ class M2LaserLogic(CounterLogic):
         # self.histogram = np.zeros(self.histogram_axis.shape)
         # self.envelope_histogram = np.zeros(self.histogram_axis.shape)
 
+#        self.start_query_loop()  #TODO fix
 
     def on_deactivate(self):
         #taken from counter_logic: (not sure if neccessary?)
@@ -199,6 +212,67 @@ class M2LaserLogic(CounterLogic):
 
         self.sigCountDataNext.disconnect()
 
+        #from laser_logic
+        """ Deactivate modeule.
+        """
+        print('TRYING TO DEACTIVATE in logic')
+        self.stop_query_loop()
+        for i in range(5):
+            time.sleep(self.queryInterval / 1000)
+            QtCore.QCoreApplication.processEvents()
+
+        # TODO be consistent in use of either QtCore.Slot (from laser logic) or counter_logic way of doing things
+        # This is adapted from original laser_logic
+
+    @QtCore.Slot()
+    def check_laser_loop(self):
+        print('check_laser_loop called in logic')
+        """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
+        if self.stopRequested:  # no -ed
+            if self.module_state.can('stop'):
+                self.module_state.stop()
+            self.stopRequested = False  # no -ed
+            return
+        qi = self.queryInterval
+        try:
+            # print('laserloop', QtCore.QThread.currentThreadId())
+            self.current_wavelength = self._laser.get_wavelength()
+            self.current_state = 'idle'
+            pass
+
+        except:
+            #          print('in check_laser_loop exception')
+             # qi = 3000
+            # self.log.exception("Exception in laser status loop, throttling refresh rate.")
+            return  # this improved stability, and somehow didn't stop check_laser_loop
+            # from working... not sure what to make of that... does SingleShot not work?
+            # maybe while testing I haven't actually accessed this?
+
+        self.queryTimer.start(qi)
+        self.sigUpdate.emit()  # sigUpdate is connected to updateGUI in m2scanner.py gui file
+
+        #      print('check_laser_loop finished in logic')
+
+    @QtCore.Slot()
+    def start_query_loop(self):
+        """ Start the readout loop. """
+        #       print('start_query_loop called in logic')
+        #  self.module_state.run()
+        self.queryTimer.start(self.queryInterval)
+
+        #       print('start_query_loop finished in logic')
+
+    @QtCore.Slot()
+    def stop_query_loop(self):
+        #    print('stop_query_loop called in logic')
+        """ Stop the readout loop. """
+        #self.stopRequested = True  # no -ed
+        for i in range(10):
+            if not self.stopRequested:  # no -ed
+                return
+            QtCore.QCoreApplication.processEvents()  # ?
+            time.sleep(self.queryInterval / 1000)
+    #    print('stop_query_loop finished in logic')
 
 
     #overload from counter_logic.py
@@ -210,6 +284,7 @@ class M2LaserLogic(CounterLogic):
         """
      #   print('count_loop_body runs')
         if self.module_state() == 'locked': #
+ #           self.stop_query_loop()
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
 
@@ -242,17 +317,21 @@ class M2LaserLogic(CounterLogic):
 #                self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
              #   self.rawdata = self._counting_device.get_counter(samples=25) #Adjust As Neccessary
 
-
+                #t1 = time.time()
                 #time elapsed since last call in seconds * samples logged per second
                 #samples logged per second = clock rate for counter (daq)
                 #0.2 sec * self._count_frequency = 0.2 sec * 50 cts per sec = 10
                 #Keep in mind get_counter is a blocking function so it will block until all the counts are filled
                 #Lagging in counts displayed is observed when samples supplied here was too small
                 #But stalling when get_counter is called is observed when samples supplied is too large
-                self.rawdata = self._counting_device.get_counter(samples=round(self._count_frequency*0.2) + 15)
+                #self.rawdata = self._counting_device.get_counter(samples=round(self._count_frequency*0.2) + 15)
+                self.rawdata = self._counting_device.get_counter(samples=1)
+                #where is self._count_frequency??? in the counter_logic - we extend a counter
+                #previously self._count_frequency was 50
                 #Ideally, we figure out how to shrink the time for samples logged per second down much more so that
                 #get_counter would always be the time-limiting step
                 #to do this we have to change the way wavelength is read
+                #t2 = time.time()
 
 
                 #print('is this an array')
@@ -266,13 +345,33 @@ class M2LaserLogic(CounterLogic):
                 #potentially error I am seeing: stop is pressed while process flow is about here.
                 #key error as laser scan stops but this function still searches for wavelength todo fix
 
-             #   t1 = time.time()
+
                 #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
-                wavelength, current_state = self._laser.get_terascan_wavelength()
-             #   t2 = time.time()
-             #   print(t2 - t1)
-             #   print(wavelength)
-             #   print(current_state)
+        #        wavelength, current_state = self._laser.get_terascan_wavelength()
+
+                #update = self._laser.get_full_tuning_status() #argument 2 to talk to socket 2; seems unnecesary?
+                #update = self._laser._last_status
+                #print(update) #confused why this is different..???
+
+                update, scandone = self._laser.get_terascan_update()
+                #print(update)
+                #print(scandone)
+
+                try:
+                    wavelength = update['wavelength'][0]
+                    current_state = 'scanning'
+                except:
+                    wavelength = self.current_wavelength
+                    current_state = 'stitching'
+
+                #t2 = time.time()
+                #print(t2 - t1)
+                #print(wavelength)
+                #print(current_state)
+               # print(scandone)
+                if scandone != None:
+                    current_state = 'complete'
+
 
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
@@ -290,6 +389,7 @@ class M2LaserLogic(CounterLogic):
                     cnt_err = self._counting_device.close_counter()
                     clk_err = self._counting_device.close_clock()
                     self.sigScanComplete.emit()
+
                     return
 
                 #handle data collected from scan
@@ -310,6 +410,7 @@ class M2LaserLogic(CounterLogic):
                     else:
                         self.log.error('No valid counting mode set! Can not process counter data.')
 
+            time.sleep(0.1)
 
             # call this again from event loop
             self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI, update_data function
