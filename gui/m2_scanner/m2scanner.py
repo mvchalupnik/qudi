@@ -372,7 +372,7 @@ class M2ScannerGUI(GUIBase):
                 return self._laser_logic.module_state()
 
             ####JUST ADDED
-            self._laser_logic.stop_query_loop()  # careful with this todo look at
+            #self._laser_logic.stop_query_loop()  # careful with this todo look at
 
             #   save terascan parameters to laser module
             self._laser_logic.scanParams = {"scanbounds": (startWvln, stopWvln), "scantype":scantype,

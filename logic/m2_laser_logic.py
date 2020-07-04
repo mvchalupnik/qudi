@@ -282,7 +282,7 @@ class M2LaserLogic(CounterLogic):
         It runs repeatedly in the logic module event loop by being connected
         to sigCountContinuousNext and emitting sigCountContinuousNext through a queued connection.
         """
-     #   print('count_loop_body runs')
+        print('count_loop_body runs')
         if self.module_state() == 'locked': #
  #           self.stop_query_loop()
             with self.threadlock:
@@ -354,8 +354,13 @@ class M2LaserLogic(CounterLogic):
                 #print(update) #confused why this is different..???
 
                 update, scandone = self._laser.get_terascan_update()
-                #print(update)
-                #print(scandone)
+                print(update)
+                print(scandone)
+                try:
+                    current_state = update['activity']
+                except:
+                    current_state = 'stitching'
+                print(current_state)
 
                 try:
                     wavelength = update['wavelength'][0]
@@ -371,6 +376,7 @@ class M2LaserLogic(CounterLogic):
                # print(scandone)
                 if scandone != None:
                     current_state = 'complete'
+                    #flush buffer
 
 
                 #Don't collect counts when the laser is stitching or otherwise not scanning
@@ -613,9 +619,22 @@ class M2LaserLogic(CounterLogic):
         """
         #First start the laser scan
         #   Send TCP message to M2 laser to start the terascan
+        self._laser.flush() #prevent timeout; clean buffer from previous run
+      #  while self._laser.flush() != -1:
+      #      self._laser.flush() #clean buffer from previous run
+
         self._laser.setup_terascan(self.scanParams["scantype"], tuple([1E9*x for x in self.scanParams["scanbounds"]]),
                                    self.scanParams["scanrate"])
+      #  rep = self._laser._last_status.get("scan_stitch_op", [])
+        self._laser._last_status = {}
+      #  print(rep)
+      #  if "report" in rep:
+      #      return "fail" if rep["report"][0] else "success"  # check for end of scan
         self._laser.start_terascan(self.scanParams["scantype"])
+        #rep = self._laser._last_status.get("scan_stitch_op", [])
+        #print(rep)
+        #if "report" in rep:
+        #    return "fail" if rep["report"][0] else "success"  # check for end of scan
 
 
         # Sanity checks

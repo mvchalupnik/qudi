@@ -141,7 +141,8 @@ laser.stop_terascan("medium")"""
             self.update_socket.sendall(message.encode('utf-8'))
             reply = self.update_socket.recv(self.buffersize)
         #self.log(reply)
-        op_reply, parameters_reply = self._parse_reply(reply)
+        print(reply)
+        op_reply, parameters_reply = self._parse_reply(reply) #??
         self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1]
         return op_reply, parameters_reply
 
@@ -196,13 +197,19 @@ laser.stop_terascan("medium")"""
         try:
             report = self.socket.recv(self.buffersize)
             #below from graham's code
+           # print(report)
+           # print('was report')
             op_replies, parameters_replies = self._parse_reply(report)
             for op_reply, parameters_reply in zip(op_replies, parameters_replies):
                 if self._is_report_op(op_reply):
                     self._last_status[self._parse_report_op(op_reply)] = parameters_reply
                     #for some reason this line (directly above) in particular is very necessary
+                    #despite not being explicitly used to plot?
+                    #Is even necessary with below chunk commented - below chunk is only necessary to end the scan
 
                     rep = self._last_status.get("scan_stitch_op", [])
+                    print(self._last_status)
+                    print(rep)
                     if "report" in rep:
                         return "fail" if rep["report"][0] else "success" #check for end of scan
                 else:
