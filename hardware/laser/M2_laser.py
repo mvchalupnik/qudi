@@ -51,9 +51,7 @@ laser.stop_terascan("medium")"""
     _modtype = 'hardware'
 
     _ip = ConfigOption('ip', missing='error')
-    _port1 = ConfigOption('port1', missing='error')
-    _port2 = ConfigOption('port2', missing='error') #Trying two ports as graham mentioned to prevent
-#crosstalk conflicts; TODO delete this seems to not matter
+    _port = ConfigOption('port', missing='error')
     _timeout = ConfigOption('timeout', 5, missing='warn') #good default setting for timeout?
 #to do add second timeout
 
@@ -70,8 +68,7 @@ laser.stop_terascan("medium")"""
         """ Initialization performed during activation of the module (like in e.g. mw_source_dummy.py)
         """
 
-        self.address1 = (self._ip, self._port1)
-        self.address2 = (self._ip, self._port2)
+        self.address = (self._ip, self._port)
         self.timeout = self._timeout
         self.transmission_id = 1
         self._last_status = {}
@@ -99,12 +96,12 @@ laser.stop_terascan("medium")"""
 
         @return bool: connection success
         """
-        self.socket = socket.create_connection(self.address1, timeout=self.timeout)
-        self.update_socket = socket.create_connection(self.address2, timeout=self.timeout)
+        self.socket = socket.create_connection(self.address, timeout=self.timeout)
+        #self.update_socket = socket.create_connection(self.address, timeout=self.timeout)
         interface = self.socket.getsockname()[0]
         _, reply = self.send('start_link', {'ip_address': interface})
-        _, reply2 = self.send('start_link', {'ip_address': interface}, socket=2)
-        if reply[-1]['status'] == 'ok' and reply2[-1]['status'] == 'ok':
+        #_, reply2 = self.send('start_link', {'ip_address': interface}, socket=2)
+        if reply[-1]['status'] == 'ok': #and reply2[-1]['status'] == 'ok':
             return True
         else:
             return False
@@ -113,7 +110,7 @@ laser.stop_terascan("medium")"""
         """ Close the connection to the instrument.
         """
         self.socket.close()
-        self.update_socket.close()
+        #self.update_socket.close()
         self.socket = None
 
     def set_timeout(self, timeout): #????Look at
@@ -124,7 +121,7 @@ laser.stop_terascan("medium")"""
         self.timeout = timeout
         self.socket.settimeout(timeout)
 
-    def send(self, op, parameters, transmission_id=None, socket=1):
+    def send(self, op, parameters, transmission_id=None):
         """ Send json message to laser
 
         :param op: operation to be performed
@@ -134,14 +131,10 @@ laser.stop_terascan("medium")"""
         """
         message = self._build_message(op, parameters, transmission_id)
 
-        if socket==1:
-            self.socket.sendall(message.encode('utf-8'))
-            reply = self.socket.recv(self.buffersize)
-        elif socket==2:
-            self.update_socket.sendall(message.encode('utf-8'))
-            reply = self.update_socket.recv(self.buffersize)
+        self.socket.sendall(message.encode('utf-8'))
+        reply = self.socket.recv(self.buffersize)
         #self.log(reply)
-        print(reply)
+        #print(reply)
         op_reply, parameters_reply = self._parse_reply(reply) #??
         self._last_status[self._parse_report_op(op_reply[-1])] = parameters_reply[-1]
         return op_reply, parameters_reply
@@ -208,8 +201,8 @@ laser.stop_terascan("medium")"""
                     #Is even necessary with below chunk commented - below chunk is only necessary to end the scan
 
                     rep = self._last_status.get("scan_stitch_op", [])
-                    print(self._last_status)
-                    print(rep)
+                    #print(self._last_status)
+                    #print(rep)
                     if "report" in rep:
                         return "fail" if rep["report"][0] else "success" #check for end of scan
                 else:
@@ -299,22 +292,22 @@ laser.stop_terascan("medium")"""
         """
         return bool(self._read_websocket_status(present_key="wlm_fitted")["wlm_fitted"])
 
-    def get_laser_state(self, socket=1):
+    def get_laser_state(self):
         """ Gets the state of the laser.
 
         :return dict: laser state message
         """
 
-        _, reply = self.send('get_status', {},socket)
+        _, reply = self.send('get_status', {})
         return reply[-1]
 
-    def get_full_tuning_status(self,socket=1):
+    def get_full_tuning_status(self):
         """ Gets the current wavelength, lock_status, and extended zone of the laser
 
         :return dict: laser tuning status
         """
 
-        _, reply = self.send('poll_wave_m', {},socket)
+        _, reply = self.send('poll_wave_m', {})
         return reply[-1]
 
     def lock_wavemeter(self, lock=True, sync=True):
@@ -430,7 +423,7 @@ laser.stop_terascan("medium")"""
             print('Timeout in get_terascan_wavelength')
             return -1, 'complete'
 
-        out = self.get_laser_state(socket=1)
+        out = self.get_laser_state()
 
         if out.get('report'): #I think this means we happened to land on the report end status update
             #(unlikely since we are constantly grabbing one update out of many)
@@ -1062,7 +1055,7 @@ laser.stop_terascan("medium")"""
 
         :param message: message to be sent
         """
-        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address1[0]), timeout=self.timeout)
+        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address[0]), timeout=self.timeout)
         try:
             self._wait_for_websocket_status(ws, present_key="wlm_fitted")
             self._wait_for_websocket_status(ws, present_key="wlm_fitted")
@@ -1092,7 +1085,7 @@ laser.stop_terascan("medium")"""
         :param nmax: number of iterations to wait for
         :return: websocket status
         """
-        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address1[0]), timeout=self.timeout)
+        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address[0]), timeout=self.timeout)
         try:
             return self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax)
         finally:
@@ -1107,7 +1100,7 @@ laser.stop_terascan("medium")"""
         :return: websocket status
         """
         print('inside read websocket status')
-        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address1[0]), timeout=self.timeout)
+        ws = websocket.create_connection("ws://{}:8088/control.htm".format(self.address[0]), timeout=self.timeout)
         try:
             self._wait_for_websocket_status(ws, present_key=present_key, nmax=nmax) #first call gets first_page
             print('read websocket status ended')
