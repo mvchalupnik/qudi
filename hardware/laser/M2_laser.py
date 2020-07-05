@@ -173,27 +173,25 @@ laser.stop_terascan("medium")"""
             return -1
         return report
 
-    #ToDo: some of the below function may be superfluous
+
     def update_reports(self, timeout=0.):
         """Check for fresh operation reports."""
         timeout = max(timeout, 0.001) #?
         self.socket.settimeout(timeout)
         try:
             report = self.socket.recv(self.buffersize)
-            #below from graham's code
-           # print(report)
-           # print('was report')
+            #From wait_for_report, as figured out by graham
             op_replies, parameters_replies = self._parse_reply(report)
             for op_reply, parameters_reply in zip(op_replies, parameters_replies):
                 if self._is_report_op(op_reply):
+                    #grab stuff from the buffer, parse
                     self._last_status[self._parse_report_op(op_reply)] = parameters_reply
                     #for some reason this line (directly above) in particular is very necessary
                     #despite not being explicitly used to plot?
-                    #Is even necessary with below chunk commented - below chunk is only necessary to end the scan
+                    #I guess parameters_replies are the important aspects to look at
 
                     rep = self._last_status.get("scan_stitch_op", [])
-                    #print(self._last_status)
-                    #print(rep)
+
                     if "report" in rep:
                         return "fail" if rep["report"][0] else "success" #check for end of scan
                 else:
@@ -228,9 +226,6 @@ laser.stop_terascan("medium")"""
             report = self.socket.recv(10000)
             op_reports, parameters_reports = self._parse_reply(report)
             for op_report, parameters_report in zip(op_reports, parameters_reports):
- #               print(op_report)
- #               print(parameters_report)
-
                 if not self._is_report_op(op_report):
                     pass
                     #self.log.warning("received reply while waiting for a report")
@@ -384,7 +379,7 @@ laser.stop_terascan("medium")"""
         return ret
         #return self.get_full_tuning_status(socket)["current_wavelength"][0]
 
-    #From Graham's code: (formerly check_terascan_update)
+    #Partially from Graham's code: (formerly check_terascan_update)
     def get_terascan_update(self):
         """Check the latest terascan update.
 
@@ -395,7 +390,7 @@ laser.stop_terascan("medium")"""
             'finished': scan is finished
             'repeat': segment is repeated
         """
-        scandone = self.update_reports()
+        scandone = self.update_reports() #check for scan finished; read in buffer and update _last_status
         report = self._last_status.get(self._terascan_update_op, {})
         self._last_status[self._terascan_update_op] = {}
         return report, scandone
@@ -406,7 +401,7 @@ laser.stop_terascan("medium")"""
         #currently calls to this function take ~.21 sec
 #        timeouted = self.flush(1000000)
         timeouted = self.flush(10000)
-        #TODO: try experimenting with not using flush, to decrease time it takes to call this function
+
 
         if timeouted == -1: #timeout or some other error in flush()
             #assume this means the scan is done, even though there are other possible reasons for this to occur
@@ -415,6 +410,9 @@ laser.stop_terascan("medium")"""
             return -1, 'complete'
 
         out = self.get_laser_state()
+        #I think the main problem with this function is the use of get_laser_state() instead of reading in the terascan
+        #updates sent automatically from the laser (when this option is enabled)
+        #This seemed difficult to parse, but turned out there were already built in functions for parsing from AlexShkarin
 
         if out.get('report'): #I think this means we happened to land on the report end status update
             #(unlikely since we are constantly grabbing one update out of many)
