@@ -52,17 +52,11 @@ laser.stop_terascan("medium")"""
 
     _ip = ConfigOption('ip', missing='error')
     _port = ConfigOption('port', missing='error')
+    #optional: add two ports to access two socket connections
     _timeout = ConfigOption('timeout', 5, missing='warn') #good default setting for timeout?
-#to do add second timeout
 
     buffersize = 1024
 
-    #def __init__(self, ip=_ip, port = _port, timeout=5):
-    #    # for now use '10.243.43.58' and 39933
-    #    self.address = (ip, port)
-    #    self.timeout = timeout
-    #    self.transmission_id = 1
-    #    self._last_status = {}
 
     def on_activate(self):
         """ Initialization performed during activation of the module (like in e.g. mw_source_dummy.py)
@@ -97,11 +91,9 @@ laser.stop_terascan("medium")"""
         @return bool: connection success
         """
         self.socket = socket.create_connection(self.address, timeout=self.timeout)
-        #self.update_socket = socket.create_connection(self.address, timeout=self.timeout)
         interface = self.socket.getsockname()[0]
         _, reply = self.send('start_link', {'ip_address': interface})
-        #_, reply2 = self.send('start_link', {'ip_address': interface}, socket=2)
-        if reply[-1]['status'] == 'ok': #and reply2[-1]['status'] == 'ok':
+        if reply[-1]['status'] == 'ok':
             return True
         else:
             return False
@@ -110,7 +102,6 @@ laser.stop_terascan("medium")"""
         """ Close the connection to the instrument.
         """
         self.socket.close()
-        #self.update_socket.close()
         self.socket = None
 
     def set_timeout(self, timeout): #????Look at
@@ -409,7 +400,7 @@ laser.stop_terascan("medium")"""
         self._last_status[self._terascan_update_op] = {}
         return report, scandone
 
-
+    #No longer used: faster version through get_terascan_update()
     def get_terascan_wavelength(self):
         #use this function to get the wavelength while terascan is running
         #currently calls to this function take ~.21 sec

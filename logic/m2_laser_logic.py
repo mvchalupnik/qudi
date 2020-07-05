@@ -79,23 +79,15 @@ class M2LaserLogic(CounterLogic):
   #  sigSavingStatusChanged = QtCore.Signal(bool)
   #  sigCountStatusChanged = QtCore.Signal(bool)
   #  sigCountingModeChanged = QtCore.Signal(CountingMode)
-    sigScanComplete = QtCore.Signal() #JUST ADDED, may be unnecessary
+    sigScanComplete = QtCore.Signal()
 
     ## declare connectors
     counter1 = Connector(interface='SlowCounterInterface')
     savelogic = Connector(interface='SaveLogic')
     fitlogic = Connector(interface='FitLogic')
 
-    # status vars: These must be adjusted in init function (below commented lines do nothing when uncommented)
-    #which is in counter_logic.py (m2_laser_logic.py extends this)
- #   _smooth_window_length = StatusVar('smooth_window_length', 10) #these may not do anything
- #   _counting_samples = StatusVar('counting_samples', 1)
- #   _count_frequency = StatusVar('count_frequency', 50)
- #   _saving = StatusVar('saving', False)
-
 
     def on_activate(self):
-        ############## Counter related on_activate tasks:
         # Connect to hardware and save logic
         print('on_activate is called in m2_laser_logic')
 
@@ -121,7 +113,7 @@ class M2LaserLogic(CounterLogic):
         self.integrated_counts = 0
 
         # initialize data arrays
-        self.countdata = np.zeros([len(self.get_channels())+1, self._count_length])#TODO are some of these unused/can be deleted?
+        self.countdata = np.zeros([len(self.get_channels())+1, self._count_length])#Some of these may be unused
         self.countdata_smoothed = np.zeros([len(self.get_channels())+1, self._count_length])
         self.rawdata = np.zeros([len(self.get_channels())+1, self._counting_samples])
         self._already_counted_samples = 0  # For gated counting
@@ -134,10 +126,7 @@ class M2LaserLogic(CounterLogic):
         # connect signals
         self.sigCountDataNext.connect(self.count_loop_body, QtCore.Qt.QueuedConnection)
 
-
-        #############     Laser-related on_activate tasks
-        """ Prepare logic module for work.
-        """
+        ## Prepare laser
         self._laser = self.laser()
         self._laser.enable_terascan_updates() #just added
         #self.stopRequest = False  # duplicate, no -ed
@@ -308,35 +297,27 @@ class M2LaserLogic(CounterLogic):
        #             self.sigCounterUpdated.emit() #plot last data bits?
                     return
 
-                #read the current wavelength value here as well, average with below val?
-
 
                 #national_instruments_x_series.py is set up to return an array with a length dependent on
                 #the counter clock frequency. To integrate over counts, just sum this array along the correct dimension
 
 #                self.rawdata = self._counting_device.get_counter(samples=self._counting_samples)
-             #   self.rawdata = self._counting_device.get_counter(samples=25) #Adjust As Neccessary
+             #   self.rawdata = self._counting_device.get_counter(samples=25) #Adjust As Necessary
 
                 #t1 = time.time()
                 #time elapsed since last call in seconds * samples logged per second
                 #samples logged per second = clock rate for counter (daq)
                 #0.2 sec * self._count_frequency = 0.2 sec * 50 cts per sec = 10
+
                 #Keep in mind get_counter is a blocking function so it will block until all the counts are filled
                 #Lagging in counts displayed is observed when samples supplied here was too small
                 #But stalling when get_counter is called is observed when samples supplied is too large
+
                 #self.rawdata = self._counting_device.get_counter(samples=round(self._count_frequency*0.2) + 15)
                 self.rawdata = self._counting_device.get_counter(samples=1)
-                #where is self._count_frequency??? in the counter_logic - we extend a counter
+                #where is self._count_frequency in the counter_logic - this class extends the counter class
                 #previously self._count_frequency was 50
-                #Ideally, we figure out how to shrink the time for samples logged per second down much more so that
-                #get_counter would always be the time-limiting step
-                #to do this we have to change the way wavelength is read
-                #t2 = time.time()
 
-
-                #print('is this an array')
-                #print(self.rawdata.shape)
-            ##    print(self.rawdata)
 
                 numSamples = self.rawdata.shape[0]
                 self.rawdata = np.sum(self.rawdata, axis=1)
@@ -346,42 +327,29 @@ class M2LaserLogic(CounterLogic):
                 #key error as laser scan stops but this function still searches for wavelength todo fix
 
 
-                #Caution: the time it takes to read the wavelength value is approx 0.2 sec, setting wavelength msmt resolution
-        #        wavelength, current_state = self._laser.get_terascan_wavelength()
+                #Previous method: took 0.2 seconds to read the wavelength; too slow
+                #wavelength, current_state = self._laser.get_terascan_wavelength()
 
-                #update = self._laser.get_full_tuning_status() #argument 2 to talk to socket 2; seems unnecesary?
-                #update = self._laser._last_status
-                #print(update) #confused why this is different..???
-
+                #New method: much faster wavelength retreival during terascan
                 update, scandone = self._laser.get_terascan_update()
-                #print(update)
-                #print(scandone)
-                try:
-                    current_state = update['activity']
-                except:
-                    current_state = 'stitching'
-                #print(current_state)
+
 
                 try:
                     wavelength = update['wavelength'][0]
-                    current_state = 'scanning'
-                except:
+                    current_state = update['activity']
+                except: #when no wavelength is returned, set current_state = "stitching"
                     wavelength = self.current_wavelength
                     current_state = 'stitching'
 
                 #t2 = time.time()
                 #print(t2 - t1)
-                #print(wavelength)
-                #print(current_state)
-               # print(scandone)
+
                 if scandone != None:
-                    current_state = 'complete'
-                    #flush buffer
+                    current_state = 'complete' #scan has completed successfully
 
 
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
-            #        print('stitching')
                     self.current_wavelength = wavelength
                     self.current_state = current_state
                     self.sigUpdate.emit()
@@ -395,7 +363,6 @@ class M2LaserLogic(CounterLogic):
                     cnt_err = self._counting_device.close_counter()
                     clk_err = self._counting_device.close_clock()
                     self.sigScanComplete.emit()
-
                     return
 
                 #handle data collected from scan
@@ -416,7 +383,7 @@ class M2LaserLogic(CounterLogic):
                     else:
                         self.log.error('No valid counting mode set! Can not process counter data.')
 
-            time.sleep(0.1)
+            time.sleep(0.1) #this can be adjusted
 
             # call this again from event loop
             self.sigCounterUpdated.emit() #this connects to m2scanner.py GUI, update_data function
@@ -425,7 +392,7 @@ class M2LaserLogic(CounterLogic):
             #this is okay because they don't access the same resources. count_loop_body accesses raw_data
             #while update_gui accesses count_data (which comes from rawdata via process_data_continuous)
 
-            self.sigUpdate.emit() #connects to updateGui to update the wavelength
+            self.sigUpdate.emit() #connects to updateGui to update the wavelength displayed
        #     print('count_loop_body ended')
         return
 
@@ -477,16 +444,9 @@ class M2LaserLogic(CounterLogic):
 
 
 
-
-#    @QtCore.Slot()
-#    def start_terascan(self,scantype, scanbounds, scanrate):
-#        self._laser.setup_terascan(scantype, tuple([1E9*x for x in scanbounds]), scanrate)
-#        self._laser.start_terascan(scantype)
-#        return
-
 #From logic/spectrum.py
     def save_spectrum_data(self, background=False, name_tag='', custom_header=None):
-        """ Saves the current spectrum data to a file.
+        """ Saves the current data to a file.
 
         @param bool background: Whether this is a background spectrum (dark field) or not.
 
@@ -610,7 +570,7 @@ class M2LaserLogic(CounterLogic):
         self.countdata = np.transpose(temp)
 
 
-    # FIXME: Not implemented for self._counting_mode == 'gated'
+    # Not implemented for self._counting_mode == 'gated'
     def startCount(self):
         """ This is called externally, and is basically a wrapper that
             redirects to the chosen counting mode start function.
@@ -620,19 +580,19 @@ class M2LaserLogic(CounterLogic):
         #First start the laser scan
         #   Send TCP message to M2 laser to start the terascan
         self._laser.flush() #prevent timeout; clean buffer from previous run
-      #  while self._laser.flush() != -1:
-      #      self._laser.flush() #clean buffer from previous run
 
         self._laser.setup_terascan(self.scanParams["scantype"], tuple([1E9*x for x in self.scanParams["scanbounds"]]),
                                    self.scanParams["scanrate"])
-        self._laser._last_status = {} #clear last status from previous run
+        self._laser._last_status = {} #clear last status from successful terascan setup - the way the scan tells it is
+            #completed is by getting a successful result back, so we want to ignore successful results from a successful
+            #set up of a terascan.
 
         self._laser.start_terascan(self.scanParams["scantype"])
 
 
         # Sanity checks
         constraints = self.get_hardware_constraints()
-        # TODO: BUG FIXED HERE: introduce corresponding changes to GitHub files
+
         if self._counting_mode.value not in [constraints.counting_mode[j].value for j in range(len(constraints.counting_mode))]:
             self.log.error('Unknown counting mode "{0}". Cannot start the counter.'
                            ''.format(self._counting_mode))
@@ -695,34 +655,42 @@ class M2LaserLogic(CounterLogic):
         return self.fc.fit_list.keys()
 
     def bin_data(self):
-
+    #mainly for purposes of fitting; in general the raw data - exact wavelengths - are saved, and binning if desired
+    #can be done in post-processing
         #order data
         self.order_data()
         data = self.countdata
 
         #Don't include initialization 0's
+        #numpy all: test whether all array elements along a given axis evaluate to true
         mask = (data==0).all(0)
         start_idx = np.argmax(~mask)
         data = data[:,start_idx:]
 
+        #find the minimum and maximum wavelength
         x_wvln_min = np.min(data[0,:])
         x_wvln_max = np.max(data[0,:])
 
         #bin the data
-        binnum = len(data[0,:]) - 1#not sure if this is best
+        binnum = len(data[0,:]) - 1#Set number of bins to maximum size (goal here is just to fit, not to bin. If
+                                    #desired one could set this to be changed by the gui, but this can also be done
+                                    #in post-processing, if at all
 
         self.binneddata_x = np.linspace(x_wvln_min, x_wvln_max, binnum)
         self.binneddata_y = np.zeros(binnum)
 
         for n in range(0,len(data[0,:])): #i'm sure there is a less ugly way than this
+            #for each data point, take the counts per second ct
             ct = data[1,n]
+            #subtract the array with bins listing each wavelength from the data in question. Find the smallest difference
+            #this is the bin we want to bin into
             arr = self.binneddata_x - data[0,n]
-            if arr[arr > 0].size != 0: #not empty
-                bn = np.where(arr == np.min(arr[arr > 0]))
-            else:
+            if arr[arr > 0].size != 0: #as long as the elements of the array that are greater than 0 are not empty
+                bn = np.where(arr == np.min(arr[arr > 0])) #find the minimum of the array greater than 0
+            else: #otherwise you are at the maximal wavelength bin
                 bn = binnum - 1
 
-            self.binneddata_y[bn] = self.binneddata_y[bn] + ct
+            self.binneddata_y[bn] = self.binneddata_y[bn] + ct #average would be more appropriate since we read counts per second
 
 
 

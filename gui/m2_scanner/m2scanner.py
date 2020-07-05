@@ -318,7 +318,8 @@ class M2ScannerGUI(GUIBase):
         try:
             self._mw.wvlnRead_disp.setText("{0:.5f}".format(self._laser_logic.current_wavelength))
         except:
-            print('current wavelength not numeric')
+            pass
+            #print('current wavelength not numeric')
         self._mw.status_disp.setText(self._laser_logic.current_state)
 
 
