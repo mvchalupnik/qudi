@@ -271,7 +271,7 @@ class M2LaserLogic(CounterLogic):
         It runs repeatedly in the logic module event loop by being connected
         to sigCountContinuousNext and emitting sigCountContinuousNext through a queued connection.
         """
-        #print('count_loop_body runs')
+        print('count_loop_body runs')
         if self.module_state() == 'locked': #
  #           self.stop_query_loop()
             with self.threadlock:

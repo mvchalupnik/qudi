@@ -204,7 +204,6 @@ class M2ScannerGUI(GUIBase):
         #if a terascan is running, stop the terascan before deactivating
         if self._laser_logic.module_state() == 'locked':
             print('Terascan is running. Trying to stop now!')
-            self._mw.run_scan_Action.setText('Start counter')
             self.sigStopCounter.emit()
 
             startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
@@ -224,6 +223,10 @@ class M2ScannerGUI(GUIBase):
         """
 #        print('update_data called in gui')
         ################ Adapted from spectrometer gui
+
+        #   Enable clicking of "start/stop" button
+        self._mw.measure_ToolBar.setEnabled(True)
+
         data = self._laser_logic.countdata
 
         #Don't plot initialization 0's
@@ -327,25 +330,22 @@ class M2ScannerGUI(GUIBase):
     def start_clicked(self): #todo: move the logic elements of this function to the logic module
         """ Handling the Start button to stop and restart the counter.
         """
-#        print('start_clicked called in gui')
+        print('start_clicked called in gui')
         if self._laser_logic.module_state() == 'locked':
 
             print('STOP TERASCAN')
 
             #   Disable/enable buttons as appropriate, update gui
             self._mw.replot_pushButton.setEnabled(True)
-            self._mw.run_scan_Action.setEnabled(False)
+            self._mw.measure_ToolBar.setEnabled(False)
 
-            self._mw.status_disp.setText('stopping scan') #is not being seen.? fixme
-            self._laser_logic.current_state = 'stopping scan' #is not being seen fixme
-
-            self._mw.run_scan_Action.setText('Start counter') #this also isn't working as far as I can tell fixme
+            self._laser_logic.current_state = 'stopping scan'
 
             #   Stop the counter
             self.sigStopCounter.emit()
 
             #   Enable the "start/stop scan" button Todo maybe wait for signal before enable?
-            self._mw.run_scan_Action.setEnabled(True)
+            self._mw.measure_ToolBar.setEnabled(True)
         else:
             print('START TERASCAN')
 
@@ -354,8 +354,7 @@ class M2ScannerGUI(GUIBase):
             self._mw.status_disp.setText('starting scan')
 
             self._mw.replot_pushButton.setEnabled(False)
-            self._mw.run_scan_Action.setEnabled(False)
-            self._mw.run_scan_Action.setText('Stop counter') #not sure if this is working fixme
+            self._mw.measure_ToolBar.setEnabled(False)
 
             #   Grab terascan parameters
             startWvln, stopWvln, scantype, scanrate, numScans = self.get_scan_info()
@@ -384,7 +383,7 @@ class M2ScannerGUI(GUIBase):
             self.sigStartCounter.emit()
 
             #   Enable clicking of "start/stop" button
-            self._mw.run_scan_Action.setEnabled(True)
+          #  self._mw.measure_ToolBar.setEnabled(True)
 
 #        print('start_clicked finished in gui')
         return self._laser_logic.module_state()
