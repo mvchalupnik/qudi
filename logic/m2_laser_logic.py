@@ -70,15 +70,6 @@ class M2LaserLogic(CounterLogic):
     #############    Adapted from CounterLogic
     sigCounterUpdated = QtCore.Signal()
     sigCountDataNext = QtCore.Signal()
-    #To be deleted: signals below
-  #  sigGatedCounterFinished = QtCore.Signal()
-  #  sigGatedCounterContinue = QtCore.Signal(bool)
-  #  sigCountingSamplesChanged = QtCore.Signal(int)
-  #  sigCountLengthChanged = QtCore.Signal(int)
-  #  sigCountFrequencyChanged = QtCore.Signal(float)
-  #  sigSavingStatusChanged = QtCore.Signal(bool)
-  #  sigCountStatusChanged = QtCore.Signal(bool)
-  #  sigCountingModeChanged = QtCore.Signal(CountingMode)
     sigScanComplete = QtCore.Signal()
 
     ## declare connectors
@@ -119,8 +110,10 @@ class M2LaserLogic(CounterLogic):
         self._already_counted_samples = 0  # For gated counting
         self._data_to_save = []
 
-        # Flag to stop the loop
-        self.stopRequested = False #modified -ed
+        # Flag to stop the terascan loop
+        self.stopRequested = False
+        # Flag to stop the laser idle read loop
+        self.stopRequest = False
         self._saving_start_time = time.time()
 
         # connect signals
@@ -135,12 +128,13 @@ class M2LaserLogic(CounterLogic):
 
         # delay timer for querying laser
         self.queryTimer = QtCore.QTimer()
+        #self.queryInterval = 1000
         self.queryTimer.setInterval(self.queryInterval)
-        self.queryTimer.setSingleShot(True)
+        self.queryTimer.setSingleShot(False)
 
         #everytime queryTimer timeout emits a signal, run check_laser_loop
         self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.QueuedConnection)
-
+       # self.queryTimer.timeout.connect(self.check_laser_loop, QtCore.Qt.DirectConnection)
 
         #set up default save_folder
         self.filepath = self._save_logic.get_path_for_module(module_name='spectra')
@@ -186,7 +180,7 @@ class M2LaserLogic(CounterLogic):
         # self.histogram = np.zeros(self.histogram_axis.shape)
         # self.envelope_histogram = np.zeros(self.histogram_axis.shape)
 
-#        self.start_query_loop()  #TODO fix
+        self.start_query_loop()
 
     def on_deactivate(self):
         #taken from counter_logic: (not sure if neccessary?)
@@ -217,27 +211,20 @@ class M2LaserLogic(CounterLogic):
     def check_laser_loop(self):
         print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
-        if self.stopRequested:  # no -ed
-            if self.module_state.can('stop'):
-                self.module_state.stop()
-            self.stopRequested = False  # no -ed
+        if self.stopRequest:
+            print('stoprequested in check laser loop')
             return
-        qi = self.queryInterval
         try:
-            # print('laserloop', QtCore.QThread.currentThreadId())
+            print('laserloop', QtCore.QThread.currentThreadId())
             self.current_wavelength = self._laser.get_wavelength()
             self.current_state = 'idle'
-            pass
-
         except:
-            #          print('in check_laser_loop exception')
+            print('in check_laser_loop exception')
              # qi = 3000
             # self.log.exception("Exception in laser status loop, throttling refresh rate.")
-            return  # this improved stability, and somehow didn't stop check_laser_loop
-            # from working... not sure what to make of that... does SingleShot not work?
-            # maybe while testing I haven't actually accessed this?
-
-        self.queryTimer.start(qi)
+            return
+        time.sleep(0.04)
+       # self.queryTimer.start(self.queryInterval)
         self.sigUpdate.emit()  # sigUpdate is connected to updateGUI in m2scanner.py gui file
 
         #      print('check_laser_loop finished in logic')
@@ -245,23 +232,23 @@ class M2LaserLogic(CounterLogic):
     @QtCore.Slot()
     def start_query_loop(self):
         """ Start the readout loop. """
-        #       print('start_query_loop called in logic')
+        print('start_query_loop called in logic')
         #  self.module_state.run()
         self.queryTimer.start(self.queryInterval)
 
-        #       print('start_query_loop finished in logic')
 
     @QtCore.Slot()
     def stop_query_loop(self):
-        #    print('stop_query_loop called in logic')
+        print('stop_query_loop called in logic')
         """ Stop the readout loop. """
-        #self.stopRequested = True  # no -ed
+        self.queryTimer.stop() #added
+        self.stopRequest = True
         for i in range(10):
-            if not self.stopRequested:  # no -ed
+            if not self.stopRequest:
                 return
             QtCore.QCoreApplication.processEvents()  # ?
             time.sleep(self.queryInterval / 1000)
-    #    print('stop_query_loop finished in logic')
+        print('stop_query_loop finished in logic')
 
 
     #overload from counter_logic.py
@@ -271,9 +258,12 @@ class M2LaserLogic(CounterLogic):
         It runs repeatedly in the logic module event loop by being connected
         to sigCountContinuousNext and emitting sigCountContinuousNext through a queued connection.
         """
-        print('count_loop_body runs')
+    #    print('count_loop_body runs')
         if self.module_state() == 'locked': #
- #           self.stop_query_loop()
+            if not self.stopRequest: #added
+                self.stop_query_loop()
+           # QtCore.QCoreApplication.processEvents() #added
+
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
 

@@ -363,13 +363,13 @@ laser.stop_terascan("medium")"""
         status = self.get_full_tuning_status()["status"][0]
         return ["idle", "nolink", "tuning", "locked"][status]
 
-    def get_wavelength(self,socket=1):
+    def get_wavelength(self):
         """
         Get fine-tuned wavelength.
 
         Only works if the wavemeter is connected.
         """
-        test = self.get_full_tuning_status(socket)
+        test = self.get_full_tuning_status()
  #       print(test)
 
         try:
