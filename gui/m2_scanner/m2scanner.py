@@ -290,10 +290,9 @@ class M2ScannerGUI(GUIBase):
         rangeFreq = stopFreq - startFreq #in Hz
         scanrate_wvln = scanrate * speed_c/(midFreq**2) #in m/s
 
-        self._mw.calcDwellTime_disp.setText("0.2 sec \n{0:.4f} pm".format(0.2*scanrate_wvln*10**12))
-                    #Scan resolution is 0.2 sec  (based on manually testing, with print
-                    #and time.time() statements in countloop). May be different on a different computer
-
+        self._mw.calcDwellTime_disp.setText("{0:.4f} pm".format(0.1*scanrate_wvln*10**12))
+                    #scan dwell time is adjustable - accessible in m2_laser_logic in count_loop_body as sleep time.
+                    # Currently set to 0.1 sec
         self._mw.calcScanRes_disp.setText("{0:.3f} GHz/s \n{1:.3f} pm/s".format(scanrate*10**-9,scanrate_wvln*10**12))
 
         totaltime = numScans*rangeFreq/scanrate
@@ -371,8 +370,6 @@ class M2ScannerGUI(GUIBase):
                 error_dialog.exec()
                 return self._laser_logic.module_state()
 
-            ####JUST ADDED
-            #self._laser_logic.stop_query_loop()  # careful with this todo look at
 
             #   save terascan parameters to laser module
             self._laser_logic.scanParams = {"scanbounds": (startWvln, stopWvln), "scantype":scantype,
@@ -411,7 +408,6 @@ class M2ScannerGUI(GUIBase):
         else:
             self._laser_logic.order_data()
             self.update_data()
-           ### self._mw.replot_pushButton.setDefault(False) #Isn't working? Supposed to reset button style TODO fix
 
     def scanComplete(self):
     #Handle the end of scans
@@ -432,11 +428,9 @@ class M2ScannerGUI(GUIBase):
             self._mw.replot_pushButton.setEnabled(True)
 
             self._laser_logic.module_state.unlock()
-            #self._laser_logic.start_query_loop() #not best place for this - todo move
-
         else:
         # Advance to next scan
-
+            self._mw.measure_ToolBar.setEnabled(False)
             self._mw.scanNumber_label.setText("Scan {0:d} of {1:d}".format(self._laser_logic.repetition_count + 1, numScans))
 
             self._laser_logic.module_state.unlock()

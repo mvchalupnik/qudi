@@ -121,10 +121,8 @@ class M2LaserLogic(CounterLogic):
 
         ## Prepare laser
         self._laser = self.laser()
-        self._laser.enable_terascan_updates() #just added
-        #self.stopRequest = False  # duplicate, no -ed
-        #self.bufferLength = 100  # ?
-        #self.data = {}
+        self._laser.enable_terascan_updates()
+
 
         # delay timer for querying laser
         self.queryTimer = QtCore.QTimer()
@@ -142,7 +140,6 @@ class M2LaserLogic(CounterLogic):
         #Initialize GUI with starting values
         self.current_wavelength = 'idle'
         self.current_state = 'idle'
-        #call updateGui TODO
 
 
         #Prepare fit logic
@@ -209,17 +206,17 @@ class M2LaserLogic(CounterLogic):
 
     @QtCore.Slot()
     def check_laser_loop(self):
-        print('check_laser_loop called in logic')
+        #print('check_laser_loop called in logic')
         """ Get current wavelength from laser (can expand to get other info like power, temp, etc. if desired) """
         if self.stopRequest:
-            print('stoprequested in check laser loop')
+            #print('stoprequested in check laser loop')
             return
         try:
-            print('laserloop', QtCore.QThread.currentThreadId())
+            #print('laserloop', QtCore.QThread.currentThreadId())
             self.current_wavelength = self._laser.get_wavelength()
             self.current_state = 'idle'
         except:
-            print('in check_laser_loop exception')
+            #print('in check_laser_loop exception')
              # qi = 3000
             # self.log.exception("Exception in laser status loop, throttling refresh rate.")
             return
@@ -232,23 +229,23 @@ class M2LaserLogic(CounterLogic):
     @QtCore.Slot()
     def start_query_loop(self):
         """ Start the readout loop. """
-        print('start_query_loop called in logic')
+        #print('start_query_loop called in logic')
         #  self.module_state.run()
         self.queryTimer.start(self.queryInterval)
 
 
     @QtCore.Slot()
     def stop_query_loop(self):
-        print('stop_query_loop called in logic')
+        #print('stop_query_loop called in logic')
         """ Stop the readout loop. """
-        self.queryTimer.stop() #added
+        self.queryTimer.stop()
         self.stopRequest = True
         for i in range(10):
             if not self.stopRequest:
                 return
             QtCore.QCoreApplication.processEvents()  # ?
             time.sleep(self.queryInterval / 1000)
-        print('stop_query_loop finished in logic')
+        #print('stop_query_loop finished in logic')
 
 
     #overload from counter_logic.py
@@ -260,14 +257,13 @@ class M2LaserLogic(CounterLogic):
         """
     #    print('count_loop_body runs')
         if self.module_state() == 'locked': #
-            if not self.stopRequest: #added
+            if not self.stopRequest:
                 self.stop_query_loop()
-           # QtCore.QCoreApplication.processEvents() #added
 
             with self.threadlock:
                 # check for aborts of the thread in break if necessary
 
-                if self.stopRequested: #modified -ed
+                if self.stopRequested:
                     self.current_state = 'scan stopped'
                     ##self.sigUpdate.emit() #show state change 'stopping scan'
                     # close off the actual counter
@@ -329,6 +325,7 @@ class M2LaserLogic(CounterLogic):
                     current_state = update['activity']
                 except: #when no wavelength is returned, set current_state = "stitching"
                     wavelength = self.current_wavelength
+                    #current_state = self.current_state #this is another option; more counts but dodgy
                     current_state = 'stitching'
 
                 #t2 = time.time()
@@ -341,7 +338,10 @@ class M2LaserLogic(CounterLogic):
                 #Don't collect counts when the laser is stitching or otherwise not scanning
                 if current_state == 'stitching':
                     self.current_wavelength = wavelength
-                    self.current_state = current_state
+                    if self.current_state == 'scan stopped' or self.current_state == 'idle':
+                        self.current_state = 'stitching'
+                    else:
+                        self.current_state = self.current_state #can change back to 'stitching'
                     self.sigUpdate.emit()
                     self.sigCountDataNext.emit()
                     return
@@ -353,6 +353,8 @@ class M2LaserLogic(CounterLogic):
                     cnt_err = self._counting_device.close_counter()
                     clk_err = self._counting_device.close_clock()
                     self.sigScanComplete.emit()
+                    self.stopRequest = False
+                    self.start_query_loop()
                     return
 
                 #handle data collected from scan
@@ -699,4 +701,3 @@ class M2LaserLogic(CounterLogic):
         )
 
         self.sig_fit_updated.emit()
-        ######self.sig_data_updated.emit()
