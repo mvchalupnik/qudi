@@ -501,6 +501,23 @@
         <string>Fitting</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_2">
+        <item row="5" column="3">
+         <widget class="QRadioButton" name="radioButton_air">
+          <property name="text">
+           <string>Air Wavelength</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="3">
+         <widget class="QRadioButton" name="radioButton_vac">
+          <property name="text">
+           <string>Vacuum Wavelength</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
         <item row="2" column="0">
          <widget class="QLabel" name="resultsLabel">
           <property name="sizePolicy">
@@ -575,10 +592,36 @@
          </widget>
         </item>
         <item row="5" column="2">
-         <widget class="QDoubleSpinBox" name="doubleSpinBox_fitmax"/>
+         <widget class="QDoubleSpinBox" name="doubleSpinBox_fitmax">
+          <property name="decimals">
+           <number>4</number>
+          </property>
+          <property name="maximum">
+           <double>900.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.000100000000000</double>
+          </property>
+          <property name="value">
+           <double>737.000000000000000</double>
+          </property>
+         </widget>
         </item>
         <item row="5" column="0">
-         <widget class="QDoubleSpinBox" name="doubleSpinBox_fitmin"/>
+         <widget class="QDoubleSpinBox" name="doubleSpinBox_fitmin">
+          <property name="decimals">
+           <number>4</number>
+          </property>
+          <property name="maximum">
+           <double>900.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.000100000000000</double>
+          </property>
+          <property name="value">
+           <double>736.000000000000000</double>
+          </property>
+         </widget>
         </item>
         <item row="4" column="2">
          <widget class="QLabel" name="label_2">
